@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Events\Reservations\ReservationConfirmed;
+use App\Events\Reservations\ReservationRejected;
 use App\Models\ReservationAttempt;
 use Features\Reservation\CreateReservation\Application\CreateReservationCommand;
 use Features\Reservation\CreateReservation\Application\CreateReservationHandler;
@@ -69,7 +71,7 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
     public static function enqueue(string $businessDate, string $time, int $peopleCount): self
     {
         $attempt = ReservationAttempt::query()->create([
-            'status' => 'pending',
+            'status' => ReservationAttempt::STATUS_PENDING,
             'payload' => [
                 'business_date' => $businessDate,
                 'time' => $time,
@@ -99,7 +101,7 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
         $attempt = ReservationAttempt::query()->find($this->attemptId);
 
         // Intento inexistente o ya resuelto: ack silencioso (idempotencia).
-        if ($attempt === null || $attempt->status !== 'pending') {
+        if ($attempt === null || $attempt->status !== ReservationAttempt::STATUS_PENDING) {
             Log::info('CreateReservationJob omitido', [
                 'attempt_id' => $this->attemptId,
                 'reason' => $attempt === null ? 'not_found' : 'already_'.$attempt->status,
@@ -123,17 +125,36 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
         ) {
             // Rechazo de negocio: permanente, no reintentar.
             $attempt->forceFill([
-                'status' => 'rejected',
+                'status' => ReservationAttempt::STATUS_REJECTED,
                 'error' => Str::limit(static::class.': '.$e->getMessage(), 250),
             ])->save();
+
+            event(new ReservationRejected(
+                $this->attemptId,
+                $e->getMessage(),
+                $this->businessDate,
+                $this->time,
+                $this->peopleCount,
+            ));
 
             return null;
         }
 
         $attempt->forceFill([
-            'status' => 'confirmed',
+            'status' => ReservationAttempt::STATUS_CONFIRMED,
             'result' => self::serializeResult($result),
         ])->save();
+
+        event(new ReservationConfirmed(
+            attemptId: $this->attemptId,
+            reservationId: $result->reservationId,
+            locationId: $result->locationId,
+            peopleCount: $result->peopleCount,
+            businessDate: $result->slot->businessDateString(),
+            startsAt: $result->slot->startsAt->format(DATE_ATOM),
+            endsAt: $result->slot->endsAt->format(DATE_ATOM),
+            tableCodes: $result->tableCodes,
+        ));
 
         return $attempt->result;
     }
@@ -145,9 +166,9 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
     {
         ReservationAttempt::query()
             ->whereKey($this->attemptId)
-            ->where('status', 'pending')
+            ->where('status', ReservationAttempt::STATUS_PENDING)
             ->update([
-                'status' => 'failed',
+                'status' => ReservationAttempt::STATUS_FAILED,
                 'error' => Str::limit(static::class.': '.$exception->getMessage(), 250),
             ]);
     }
