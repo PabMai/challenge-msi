@@ -1,0 +1,89 @@
+<?php
+
+use App\Infrastructure\Reservations\MysqlAvailabilityReader;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+
+uses(RefreshDatabase::class);
+
+function makeSlot(string $date, string $start, string $end): Features\Reservation\ValidateReservation\Domain\Model\ServiceSlot
+{
+    return new Features\Reservation\ValidateReservation\Domain\Model\ServiceSlot(
+        new DateTimeImmutable($date),
+        new DateTimeImmutable("$date $start"),
+        new DateTimeImmutable("$date $end"),
+    );
+}
+
+test('ordena las ubicaciones por sort_order', function () {
+    App\Models\Location::create(['name' => 'Terraza', 'sort_order' => 2]);
+    App\Models\Location::create(['name' => 'Salón', 'sort_order' => 1]);
+
+    $locations = (new MysqlAvailabilityReader)->orderedLocations();
+
+    expect(array_column($locations, 'name'))->toBe(['Salón', 'Terraza'])
+        ->and(array_column($locations, 'id'))->each->toBeInt();
+});
+
+test('devuelve solo mesas de la ubicacion ordenadas por codigo', function () {
+    $salon = App\Models\Location::factory()->create(['name' => 'Salón', 'sort_order' => 1]);
+    $terraza = App\Models\Location::factory()->create(['name' => 'Terraza', 'sort_order' => 2]);
+    App\Models\Table::factory()->create(['location_id' => $terraza->id, 'code' => 'T01']);
+    App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+    App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
+
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'));
+
+    expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01', 'S02'])
+        ->and($tables[1])->capacity->toBe(4);
+});
+
+test('excluye mesas con reserva que se solapa con el turno', function () {
+    $salon = App\Models\Location::factory()->create();
+    $libre = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
+    $ocupada = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+
+    $reserva = App\Models\Reservation::create([
+        'business_date' => '2026-08-21',
+        'starts_at' => '2026-08-21 20:00:00',
+        'ends_at' => '2026-08-21 22:00:00',
+        'people_count' => 4,
+        'location_id' => $salon->id,
+    ]);
+    $reserva->tables()->attach([$ocupada->id]);
+
+    // el turno solicitado 21:00-23:00 solapa con la reserva existente 20:00-22:00
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '21:00', '23:00'));
+
+    expect(array_map(fn ($t) => $t->code, $tables))->toBe([$libre->code]);
+});
+
+test('no excluye reservas de otro business_date ni turnos contiguos', function () {
+    $salon = App\Models\Location::factory()->create();
+    $otroDia = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
+    $contigua = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+
+    // S01 ocupada el sábado (otro business_date)
+    $r1 = App\Models\Reservation::create([
+        'business_date' => '2026-08-22',
+        'starts_at' => '2026-08-22 20:00:00',
+        'ends_at' => '2026-08-22 22:00:00',
+        'people_count' => 2,
+        'location_id' => $salon->id,
+    ]);
+    $r1->tables()->attach([$otroDia->id]);
+
+    // S02 con turno que termina justo antes del solicitado (19:59 < 20:00)
+    $r2 = App\Models\Reservation::create([
+        'business_date' => '2026-08-21',
+        'starts_at' => '2026-08-21 18:00:00',
+        'ends_at' => '2026-08-21 20:00:00',
+        'people_count' => 2,
+        'location_id' => $salon->id,
+    ]);
+    $r2->tables()->attach([$contigua->id]);
+
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'));
+
+    expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01', 'S02']);
+});
