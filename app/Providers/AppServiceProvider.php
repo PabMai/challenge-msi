@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Infrastructure\Reservations\CacheAvailabilityReader;
 use App\Infrastructure\Reservations\EloquentReservationWriter;
 use App\Infrastructure\Reservations\MysqlAvailabilityReader;
+use Features\Reservation\CreateReservation\Application\CreateReservationHandler;
 use Features\Reservation\CreateReservation\Application\Port\AvailabilityReaderInterface;
 use Features\Reservation\CreateReservation\Application\Port\ReservationWriterInterface;
 use Features\Reservation\ValidateReservation\Application\ValidateReservationHandler;
@@ -39,6 +40,15 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->singleton(CombinateTablesHandler::class, static fn (): CombinateTablesHandler => new CombinateTablesHandler(
             new TableCombinator,
+        ));
+
+        // Orquestador de la feature: compone las APIs públicas + puertos + config.
+        $this->app->bind(CreateReservationHandler::class, static fn (Application $app): CreateReservationHandler => new CreateReservationHandler(
+            $app->make(ValidateReservationHandler::class),
+            $app->make(CombinateTablesHandler::class),
+            $app->make(AvailabilityReaderInterface::class),
+            $app->make(ReservationWriterInterface::class),
+            (int) config('reservations.max_tables_per_reservation'),
         ));
     }
 
