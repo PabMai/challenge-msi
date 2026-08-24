@@ -6,6 +6,8 @@ use App\Models\ReservationAttempt;
 use App\Models\Table;
 use Features\Reservation\CreateReservation\Application\CreateReservationHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
@@ -30,34 +32,38 @@ function seedSalon(): Location
 
 function makePendingAttempt(array $payload): ReservationAttempt
 {
-    return ReservationAttempt::query()->create(['status' => 'pending', 'payload' => $payload]);
+    return ReservationAttempt::query()->create(['status' => ReservationAttempt::STATUS_PENDING, 'payload' => $payload]);
 }
 
 test('procesa un intento pending y lo marca confirmed con resultado', function () {
     $salon = seedSalon();
-    $attempt = makePendingAttempt(['business_date' => '2026-08-21', 'time' => '20:00', 'people_count' => 6]);
+    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 6]);
 
     $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 6, new DateTimeImmutable('2026-08-21 12:00:00'));
     $out = $job->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
-    expect($attempt->status)->toBe('confirmed')
+    expect($attempt->status)->toBe(ReservationAttempt::STATUS_CONFIRMED)
         ->and($out['reservation_id'])->toBeInt()
         ->and($out['location_name'])->toBe('Salón')
         ->and($out['table_codes'])->toBe(['S02', 'S03'])
         ->and($out['starts_at'])->toEndWith('20:00:00+00:00');
 
-    expect(\Illuminate\Support\Facades\DB::table('reservations')->count())->toBe(1)
-        ->and(\Illuminate\Support\Facades\DB::table('reservation_table')->where('reservation_id', $out['reservation_id'])->count())->toBe(2);
+    expect(DB::table('reservations')->count())->toBe(1)
+        ->and(DB::table('reservation_table')->where('reservation_id', $out['reservation_id'])->count())->toBe(2);
 });
 
 test('intento ya resuelto se ignora por idempotencia', function () {
     seedSalon();
 
-    foreach (['confirmed', 'rejected', 'failed'] as $status) {
+    foreach ([
+        ReservationAttempt::STATUS_CONFIRMED,
+        ReservationAttempt::STATUS_REJECTED,
+        ReservationAttempt::STATUS_FAILED,
+    ] as $status) {
         $attempt = ReservationAttempt::query()->create([
             'status' => $status,
-            'payload' => ['business_date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2],
+            'payload' => ['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2],
         ]);
 
         $out = (new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, new DateTimeImmutable('2026-08-21 12:00:00')))
@@ -66,7 +72,7 @@ test('intento ya resuelto se ignora por idempotencia', function () {
         expect($out)->toBeNull();
     }
 
-    expect(\Illuminate\Support\Facades\DB::table('reservations')->count())->toBe(0)
+    expect(DB::table('reservations')->count())->toBe(0)
         ->and(ReservationAttempt::query()->whereKeyNot('x')->count())->toBe(3);
 });
 
@@ -77,52 +83,52 @@ test('intento inexistente se omite silenciosamente', function () {
         ->handle(app(CreateReservationHandler::class));
 
     expect($out)->toBeNull()
-        ->and(\Illuminate\Support\Facades\DB::table('reservations')->count())->toBe(0);
+        ->and(DB::table('reservations')->count())->toBe(0);
 });
 
 test('rechazo de negocio marca rejected sin reintentar', function () {
     $salon = seedSalon();
     // grupo de 10 con max 3 mesas (2+4+4=10 justo)... usamos 12 para exceder capacidad
-    $attempt = makePendingAttempt(['business_date' => '2026-08-21', 'time' => '20:00', 'people_count' => 12]);
+    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 12]);
 
     $out = (new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 12, new DateTimeImmutable('2026-08-21 12:00:00')))
         ->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
     expect($out)->toBeNull()
-        ->and($attempt->status)->toBe('rejected')
+        ->and($attempt->status)->toBe(ReservationAttempt::STATUS_REJECTED)
         ->and($attempt->error)->not->toBeNull()
-        ->and(\Illuminate\Support\Facades\DB::table('reservations')->count())->toBe(0);
+        ->and(DB::table('reservations')->count())->toBe(0);
 });
 
 test('fuera de horario tambien es rechazo permanente', function () {
     seedSalon();
-    $attempt = makePendingAttempt(['business_date' => '2026-08-21', 'time' => '23:30', 'people_count' => 2]);
+    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '23:30', 'people_count' => 2]);
 
     (new CreateReservationJob($attempt->id, '2026-08-21', '23:30', 2, new DateTimeImmutable('2026-08-21 12:00:00')))
         ->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
-    expect($attempt->status)->toBe('rejected')
+    expect($attempt->status)->toBe(ReservationAttempt::STATUS_REJECTED)
         ->and($attempt->error)->not->toBeNull();
 });
 
 test('failed() agota el intento marcandolo failed solo si sigue pending', function () {
-    $attempt = makePendingAttempt(['business_date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2]);
+    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2]);
 
     (new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, new DateTimeImmutable('2026-08-21 12:00:00')))
         ->failed(new RuntimeException('boom'));
 
     $attempt->refresh();
-    expect($attempt->status)->toBe('failed')
+    expect($attempt->status)->toBe(ReservationAttempt::STATUS_FAILED)
         ->and($attempt->error)->toContain('boom');
 
     // un attempt ya confirmado no debe sobreescribirse
-    $ok = makePendingAttempt(['business_date' => '2026-08-22', 'time' => '20:00', 'people_count' => 2]);
-    $ok->forceFill(['status' => 'confirmed'])->save();
+    $ok = makePendingAttempt(['date' => '2026-08-22', 'time' => '20:00', 'people_count' => 2]);
+    $ok->forceFill(['status' => ReservationAttempt::STATUS_CONFIRMED])->save();
     (new CreateReservationJob($ok->id, '2026-08-22', '20:00', 2, new DateTimeImmutable('2026-08-21 12:00:00')))->failed(new RuntimeException('tarde'));
     $ok->refresh();
-    expect($ok->status)->toBe('confirmed');
+    expect($ok->status)->toBe(ReservationAttempt::STATUS_CONFIRMED);
 });
 
 test('configuracion del job: cola tries backoff y middleware', function () {
@@ -131,11 +137,11 @@ test('configuracion del job: cola tries backoff y middleware', function () {
     expect($job->queue)->toBe('reservations')
         ->and($job->tries)->toBe(3)
         ->and($job->backoff)->toBe([5, 15, 60])
-        ->and($job->middleware()[0])->toBeInstanceOf(Illuminate\Queue\Middleware\WithoutOverlapping::class);
+        ->and($job->middleware()[0])->toBeInstanceOf(WithoutOverlapping::class);
 
     Queue::fake();
     CreateReservationJob::enqueue('2026-08-21', '20:00', 4);
     Queue::assertPushedOn('reservations', CreateReservationJob::class);
 
-    expect(ReservationAttempt::query()->where('status', 'pending')->count())->toBe(1);
+    expect(ReservationAttempt::query()->where('status', ReservationAttempt::STATUS_PENDING)->count())->toBe(1);
 });
