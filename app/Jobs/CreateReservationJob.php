@@ -54,12 +54,15 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
     /**
      * @param  non-empty-string  $date  Y-m-d (día de servicio)
      * @param  non-empty-string  $time  H:i solicitado
+     * @param  non-negative-int  $peopleCount
+     * @param  positive-int  $locationId  ubicación elegida por el cliente (sin fallback)
      */
     public function __construct(
         public readonly string $attemptId,
         public readonly string $date,
         public readonly string $time,
         public readonly int $peopleCount,
+        public readonly int $locationId,
         public readonly ?\DateTimeImmutable $now = null,
     ) {
         $this->queue = 'reservations';
@@ -68,7 +71,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
     /**
      * Crea el intento en base de datos y encola el job.
      */
-    public static function enqueue(string $date, string $time, int $peopleCount): self
+    public static function enqueue(string $date, string $time, int $peopleCount, int $locationId): self
     {
         $attempt = ReservationAttempt::query()->create([
             'status' => ReservationAttempt::STATUS_PENDING,
@@ -76,10 +79,14 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
                 'date' => $date,
                 'time' => $time,
                 'people_count' => $peopleCount,
+                'location_id' => $locationId,
             ],
         ]);
 
-        return tap(new self($attempt->id, $date, $time, $peopleCount), fn (self $job) => dispatch($job));
+        return tap(
+            new self($attempt->id, $date, $time, $peopleCount, $locationId),
+            fn (self $job) => dispatch($job),
+        );
     }
 
     /**
@@ -116,6 +123,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
                 time: $this->time,
                 peopleCount: $this->peopleCount,
                 now: $this->now ?? now()->toDateTimeImmutable(),
+                locationId: $this->locationId,
             ));
         } catch (
             InvalidPartySizeException
