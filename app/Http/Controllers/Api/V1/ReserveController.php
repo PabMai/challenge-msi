@@ -25,6 +25,7 @@ final class ReserveController extends Controller
             date: $request->string('reservation_date')->toString(),
             time: $request->string('reservation_time')->toString(),
             peopleCount: $request->integer('reservation_people_count'),
+            locationId: $request->integer('reservation_location'),
         );
 
         return response()->json(

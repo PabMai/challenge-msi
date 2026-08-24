@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Location;
 use Illuminate\View\View;
 
 /**
@@ -14,6 +15,10 @@ final class HomeController extends Controller
 {
     public function index(): View
     {
-        return view('pages.index');
+        return view('pages.index', [
+            'locations' => Location::query()
+                ->orderBy('sort_order')
+                ->get(['id', 'name']),
+        ]);
     }
 }

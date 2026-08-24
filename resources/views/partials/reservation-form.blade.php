@@ -36,16 +36,21 @@
                 </div>
             </x-molecule.field>
 
-            <x-molecule.field>
-                <x-atom.label for="reservation_location" class="col-sm-3">Ubicación</x-atom.label>
-                <div class="col-sm-9">
-                    <x-atom.select id="reservation_location" name="reservation_location">
-                        <option value="" @selected(old('reservation_location')===null)>Seleccionar ubicación</option>
-                        <option value="salon" @selected(old('reservation_location')==='salon' )>Salón</option>
-                        <option value="terraza" @selected(old('reservation_location')==='terraza' )>Terraza</option>
-                    </x-atom.select>
-                </div>
-            </x-molecule.field>
+                <x-molecule.field>
+                    <x-atom.label for="reservation_location" class="col-sm-3">Ubicación</x-atom.label>
+                    <div class="col-sm-9">
+                        <x-atom.select id="reservation_location" name="reservation_location">
+                            <option value="" @selected(old('reservation_location') === null)>Seleccionar ubicación</option>
+                            @foreach ($locations as $location)
+                                <option value="{{ $location->id }}"
+                                    @selected((string) old('reservation_location') === (string) $location->id)>
+                                    {{ $location->name }}
+                                </option>
+                            @endforeach
+                        </x-atom.select>
+                        <x-atom.invalid-feedback data-reservation-error="reservation_location"></x-atom.invalid-feedback>
+                    </div>
+                </x-molecule.field>
         </x-molecule.card-body>
         <x-molecule.card-footer>
             <div class="d-flex justify-content-end">

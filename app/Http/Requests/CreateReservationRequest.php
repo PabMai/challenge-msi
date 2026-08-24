@@ -30,6 +30,7 @@ class CreateReservationRequest extends FormRequest
             'reservation_date' => ['required', 'date_format:Y-m-d'],
             'reservation_time' => ['required', 'date_format:H:i', new SchedulableSlot],
             'reservation_people_count' => ['required', 'integer', 'min:1'],
+            'reservation_location' => ['required', 'integer', 'exists:locations,id'],
         ];
     }
 
@@ -46,6 +47,9 @@ class CreateReservationRequest extends FormRequest
             'reservation_people_count.required' => 'La cantidad de personas es obligatoria.',
             'reservation_people_count.integer' => 'La cantidad de personas debe ser un número entero.',
             'reservation_people_count.min' => 'La cantidad de personas debe ser al menos 1.',
+            'reservation_location.required' => 'La ubicación es obligatoria.',
+            'reservation_location.integer' => 'La ubicación debe ser un identificador válido.',
+            'reservation_location.exists' => 'La ubicación seleccionada no existe.',
         ];
     }
 }
