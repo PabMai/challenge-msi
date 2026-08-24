@@ -10,5 +10,5 @@
             </div>
         </div>
     </div>
-    <x-organism.spinner />
+    <x-organism.spinner data-reservation-spinner />
 @endsection
