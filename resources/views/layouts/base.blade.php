@@ -3,10 +3,16 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>@yield('title', config('app.name', 'Laravel'))</title>
         @vite('resources/css/app.css')
     </head>
-    <body class="container py-5">
-        <h1 class="text-center text-primary">¡Hola Mundo!</h1>
+    <body class="">
+        @hasSection('header')
+            @yield('header')
+        @endif
+
+        <main class="container py-4">
+            @yield('content')
+        </main>
     </body>
 </html>
