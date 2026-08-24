@@ -8,6 +8,9 @@ const csrfToken = () =>
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const cleanError = (message) =>
+    String(message ?? '').replace(/^App\\Jobs\\CreateReservationJob:\s*/, '');
+
 const payloadFrom = (form) => {
     const data = Object.fromEntries(new FormData(form));
     delete data._token;
@@ -117,9 +120,12 @@ class ReservationFormController {
             }
 
             if (status === 'rejected' || status === 'failed') {
+                const clean = cleanError(error);
+                console.debug('[reservas] cleanError:', { raw: error, clean });
+
                 this.#showOutcome(
                     'danger',
-                    error || 'La reserva fue rechazada. No quedó registrada.',
+                    clean || 'La reserva fue rechazada. No quedó registrada.',
                     'No pudimos registrar tu reserva',
                 );
 
@@ -159,10 +165,27 @@ class ReservationFormController {
         }
 
         if (this.modalBody) {
-            this.modalBody.textContent = body;
+            this.modalBody.replaceChildren(
+                typeof body === 'string'
+                    ? document.createTextNode(body)
+                    : this.#buildList(body),
+            );
         }
 
         this.modal.show();
+    }
+
+    #buildList(items) {
+        const list = document.createElement('ul');
+        list.className = 'mb-0 ps-3';
+
+        items.forEach((item) => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            list.append(li);
+        });
+
+        return list;
     }
 
     #showOutcome(tone, body, title) {
@@ -179,11 +202,13 @@ class ReservationFormController {
 
     #showValidationErrors(message, errors) {
         renderFieldErrors(this.form, errors);
-        this.#showModal(
-            'Error de validación',
-            message || 'Revisá los datos ingresados.',
-            'danger',
-        );
+
+        const messages = Object.values(errors ?? {}).flat();
+        const body = messages.length > 1
+            ? messages
+            : (messages[0] ?? message);
+
+        this.#showModal('Error de validación', body, 'danger');
     }
 
     #showConfirmation(result) {

@@ -134,7 +134,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
             // Rechazo de negocio: permanente, no reintentar.
             $attempt->forceFill([
                 'status' => ReservationAttempt::STATUS_REJECTED,
-                'error' => Str::limit(self::class.': '.$e->getMessage(), 250),
+                'error' => Str::limit($e->getMessage(), 250),
             ])->save();
 
             event(new ReservationRejected(
@@ -177,7 +177,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
             ->where('status', ReservationAttempt::STATUS_PENDING)
             ->update([
                 'status' => ReservationAttempt::STATUS_FAILED,
-                'error' => Str::limit(self::class.': '.$exception->getMessage(), 250),
+                'error' => Str::limit($exception->getMessage(), 250),
             ]);
     }
 

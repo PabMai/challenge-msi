@@ -6,12 +6,12 @@
         </x-molecule.modal-header>
 
         <x-molecule.modal-body>
-            <p class="mb-0" data-reservation-modal-body></p>
+            <div class="mb-0" data-reservation-modal-body></div>
         </x-molecule.modal-body>
 
         <x-molecule.modal-footer>
             <x-atom.button type="button" variant="secondary" data-bs-dismiss="modal">
-                Entendido
+                Aceptar
             </x-atom.button>
         </x-molecule.modal-footer>
     </x-molecule.modal-content>
