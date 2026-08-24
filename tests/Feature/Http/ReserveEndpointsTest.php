@@ -24,6 +24,9 @@ function reservePayload(array $overrides = []): array
         'reservation_date' => nextFriday(),
         'reservation_time' => '20:00',
         'reservation_people_count' => 4,
+        'reservation_location' => Location::query()
+            ->firstOrCreate(['name' => 'Salón'], ['sort_order' => 1])
+            ->id,
     ], $overrides);
 }
 
@@ -76,7 +79,24 @@ test('POST /reserve valida campos basicos', function () {
 
     $this->postJson('/api/v1/reserve', ['reservation_date' => nextFriday()])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['reservation_time', 'reservation_people_count']);
+        ->assertJsonValidationErrors(['reservation_time', 'reservation_people_count', 'reservation_location']);
+});
+
+test('POST /reserve exige ubicacion existente', function () {
+    Queue::fake();
+
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_location' => null]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('reservation_location');
+
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_location' => 99999]))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('reservation_location')
+        ->assertJsonPath('errors.reservation_location.0', 'La ubicación seleccionada no existe.');
+
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_location' => 'salon']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('reservation_location');
 });
 
 test('GET attempt devuelve estado pendiente y resuelto', function () {

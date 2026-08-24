@@ -109,6 +109,45 @@ test('lanza InsufficientCapacity cuando ninguna ubicacion cubre al grupo', funct
     );
 })->throws(InsufficientCapacityException::class);
 
+test('respeta la ubicacion elegida aunque otra tenga disponibilidad', function () use ($fridayNoon) {
+    $reader = new InMemoryReader(
+        [
+            ['id' => 1, 'name' => 'Salón'],
+            ['id' => 2, 'name' => 'Terraza'],
+        ],
+        [
+            2 => [new AvailableTable(20, 'T01', 4)],
+        ],
+    );
+    $writer = new InMemoryWriter;
+
+    $result = createHandler($reader, $writer)->handle(
+        new CreateReservationCommand('2026-08-21', '20:00', 4, $fridayNoon, locationId: 2),
+    );
+
+    expect($result->locationName)->toBe('Terraza')
+        ->and($result->tableCodes)->toBe(['T01'])
+        ->and($writer->persisted[0]['locationId'])->toBe(2);
+});
+
+test('rechaza la ubicacion elegida llena sin caer a otras', function () use ($fridayNoon) {
+    $reader = new InMemoryReader(
+        [
+            ['id' => 1, 'name' => 'Salón'],
+            ['id' => 2, 'name' => 'Terraza'],
+        ],
+        [
+            1 => [new AvailableTable(10, 'S01', 8)],
+            2 => [new AvailableTable(20, 'T01', 2)],
+        ],
+    );
+    $writer = new InMemoryWriter;
+
+    createHandler($reader, $writer)->handle(
+        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 2),
+    );
+})->throws(InsufficientCapacityException::class);
+
 test('propaga el cutoff desde la feature de validacion', function () use ($fridayNoon) {
     // límite para 21:00 es 20:45 → 20:50 queda fuera
     $reader = new InMemoryReader([['id' => 1, 'name' => 'Salón']], [1 => []]);
