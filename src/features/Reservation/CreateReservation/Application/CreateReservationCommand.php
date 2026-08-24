@@ -10,10 +10,9 @@ namespace Features\Reservation\CreateReservation\Application;
 final readonly class CreateReservationCommand
 {
     public function __construct(
-        public string $businessDate, // Y-m-d tal como la pide el cliente
-        public string $time,         // H:i solicitado (puede ser madrugada)
+        public string $date,   // Y-m-d tal como la pide el cliente
+        public string $time,   // H:i solicitado (puede ser madrugada)
         public int $peopleCount,
         public \DateTimeImmutable $now,
-    ) {
-    }
+    ) {}
 }

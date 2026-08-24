@@ -24,27 +24,25 @@ use Features\Reservation\ValidateReservation\Domain\Model\ServiceSlot;
  */
 final class ScheduleValidator
 {
-
     /**
-     * @param array<int, list<array{start:int,end:int}>> $businessHours
+     * @param  array<int, list<array{start:int,end:int}>>  $businessHours
      */
     public function __construct(
         private readonly array $businessHours,
         private readonly int $durationMinutes,
         private readonly int $cutoffMinutes,
-    ) {
-    }
+    ) {}
 
     /**
      * @throws InvalidPartySizeException
      * @throws OutsideBusinessHoursException
      * @throws CutoffExceededException
      */
-    public function resolve(DateTimeImmutable $now, string $businessDate, string $time): ServiceSlot
+    public function resolve(DateTimeImmutable $now, string $date, string $time): ServiceSlot
     {
-        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $businessDate);
-        if ($date === false) {
-            throw new \InvalidArgumentException("Fecha inválida: {$businessDate} (formato esperado Y-m-d).");
+        $requestedDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if ($requestedDate === false) {
+            throw new \InvalidArgumentException("Fecha inválida: {$date} (formato esperado Y-m-d).");
         }
 
         $minutes = $this->parseTime($time);
@@ -54,8 +52,8 @@ final class ScheduleValidator
         //    cruzan medianoche, p.ej. sábado [1320,1560]).
         foreach (
             [
-                [$date, $minutes],
-                [$date->modify('-1 day'), $minutes + 1440],
+                [$requestedDate, $minutes],
+                [$requestedDate->modify('-1 day'), $minutes + 1440],
             ] as [$day, $offset]
         ) {
             $window = $this->findWindow((int) $day->format('N'), $offset);
@@ -64,11 +62,11 @@ final class ScheduleValidator
             }
         }
 
-        throw OutsideBusinessHoursException::forDay((int) $date->format('N'), $businessDate, $time);
+        throw OutsideBusinessHoursException::forDay((int) $requestedDate->format('N'), $date, $time);
     }
 
     /**
-     * @param array{start:int,end:int} $window
+     * @param  array{start:int,end:int}  $window
      */
     private function findWindow(int $isoDay, int $offset): ?array
     {
@@ -82,7 +80,7 @@ final class ScheduleValidator
     }
 
     /**
-     * @param array{start:int,end:int} $window
+     * @param  array{start:int,end:int}  $window
      */
     private function buildSlot(
         DateTimeImmutable $now,
@@ -109,7 +107,7 @@ final class ScheduleValidator
 
     private function parseTime(string $time): int
     {
-        $parts = \DateTimeImmutable::createFromFormat('!H:i', $time);
+        $parts = DateTimeImmutable::createFromFormat('!H:i', $time);
         if ($parts === false) {
             throw new \InvalidArgumentException("Hora inválida: {$time} (formato esperado H:i).");
         }

@@ -39,7 +39,7 @@ use Illuminate\Support\Str;
  * para que Laravel reintente con backoff; agotados los intentos, failed()
  * marca el attempt como "failed".
  */
-final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProcessing
+final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -52,12 +52,12 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
     public array $backoff = [5, 15, 60];
 
     /**
-     * @param  non-empty-string  $businessDate  Y-m-d (día de servicio)
-     * @param  non-empty-string  $time          H:i solicitado
+     * @param  non-empty-string  $date  Y-m-d (día de servicio)
+     * @param  non-empty-string  $time  H:i solicitado
      */
     public function __construct(
         public readonly string $attemptId,
-        public readonly string $businessDate,
+        public readonly string $date,
         public readonly string $time,
         public readonly int $peopleCount,
         public readonly ?\DateTimeImmutable $now = null,
@@ -68,18 +68,18 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
     /**
      * Crea el intento en base de datos y encola el job.
      */
-    public static function enqueue(string $businessDate, string $time, int $peopleCount): self
+    public static function enqueue(string $date, string $time, int $peopleCount): self
     {
         $attempt = ReservationAttempt::query()->create([
             'status' => ReservationAttempt::STATUS_PENDING,
             'payload' => [
-                'business_date' => $businessDate,
+                'date' => $date,
                 'time' => $time,
                 'people_count' => $peopleCount,
             ],
         ]);
 
-        return tap(new self($attempt->id, $businessDate, $time, $peopleCount), fn (self $job) => dispatch($job));
+        return tap(new self($attempt->id, $date, $time, $peopleCount), fn (self $job) => dispatch($job));
     }
 
     /**
@@ -90,7 +90,7 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
     public function middleware(): array
     {
         return [
-            (new WithoutOverlapping('create-reservation:'.$this->businessDate))
+            (new WithoutOverlapping('create-reservation:'.$this->date))
                 ->releaseAfter(15)
                 ->expireAfter(600),
         ];
@@ -112,27 +112,27 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
 
         try {
             $result = $handler->handle(new CreateReservationCommand(
-                businessDate: $this->businessDate,
+                date: $this->date,
                 time: $this->time,
                 peopleCount: $this->peopleCount,
                 now: $this->now ?? now()->toDateTimeImmutable(),
             ));
         } catch (
             InvalidPartySizeException
-            | InsufficientCapacityException
-            | OutsideBusinessHoursException
-            | CutoffExceededException $e
+            |InsufficientCapacityException
+            |OutsideBusinessHoursException
+            |CutoffExceededException $e
         ) {
             // Rechazo de negocio: permanente, no reintentar.
             $attempt->forceFill([
                 'status' => ReservationAttempt::STATUS_REJECTED,
-                'error' => Str::limit(static::class.': '.$e->getMessage(), 250),
+                'error' => Str::limit(self::class.': '.$e->getMessage(), 250),
             ])->save();
 
             event(new ReservationRejected(
                 $this->attemptId,
                 $e->getMessage(),
-                $this->businessDate,
+                $this->date,
                 $this->time,
                 $this->peopleCount,
             ));
@@ -169,7 +169,7 @@ final class CreateReservationJob implements ShouldQueue, ShouldBeUniqueUntilProc
             ->where('status', ReservationAttempt::STATUS_PENDING)
             ->update([
                 'status' => ReservationAttempt::STATUS_FAILED,
-                'error' => Str::limit(static::class.': '.$exception->getMessage(), 250),
+                'error' => Str::limit(self::class.': '.$exception->getMessage(), 250),
             ]);
     }
 

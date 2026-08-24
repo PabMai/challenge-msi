@@ -6,10 +6,10 @@ namespace Features\Reservation\ValidateReservation\Domain\Exception;
 
 final class OutsideBusinessHoursException extends \DomainException
 {
-    public static function forDay(int $isoDay, string $businessDate, string $time): self
+    public static function forDay(int $isoDay, string $date, string $time): self
     {
         return new self(
-            sprintf('El %s no hay servicio a las %s (día ISO %d).', $businessDate, $time, $isoDay)
+            sprintf('El %s no hay servicio a las %s (día ISO %d).', $date, $time, $isoDay)
         );
     }
 

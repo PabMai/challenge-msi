@@ -7,11 +7,11 @@ namespace Features\Reservation\CreateReservation\Application;
 use Features\Reservation\CreateReservation\Application\Port\AvailabilityReaderInterface;
 use Features\Reservation\CreateReservation\Application\Port\ReservationWriterInterface;
 use Features\Reservation\CreateReservation\Domain\Exception\InsufficientCapacityException;
+use Features\Reservation\CreateReservation\Domain\Exception\InvalidPartySizeException;
 use Features\Reservation\ValidateReservation\Application\ValidateReservationCommand;
 use Features\Reservation\ValidateReservation\Application\ValidateReservationHandler;
 use Features\Reservation\ValidateReservation\Domain\Exception\CutoffExceededException;
 use Features\Reservation\ValidateReservation\Domain\Exception\OutsideBusinessHoursException;
-use Features\Reservation\CreateReservation\Domain\Exception\InvalidPartySizeException;
 use Features\Table\CombinateTable\Application\CombinateTablesCommand;
 use Features\Table\CombinateTable\Application\CombinateTablesHandler;
 
@@ -36,8 +36,7 @@ final class CreateReservationHandler
         private readonly AvailabilityReaderInterface $reader,
         private readonly ReservationWriterInterface $writer,
         private readonly int $maxTablesPerReservation,
-    ) {
-    }
+    ) {}
 
     /**
      * @throws InvalidPartySizeException
@@ -52,7 +51,7 @@ final class CreateReservationHandler
         }
 
         $slot = $this->validateReservation->handle(new ValidateReservationCommand(
-            businessDate: $command->businessDate,
+            date: $command->date,
             time: $command->time,
             now: $command->now,
         ));

@@ -18,7 +18,7 @@ final class LogRejectedReason
             'attempt_id' => $event->attemptId,
             'reason' => $event->reason,
             'requested' => [
-                'business_date' => $event->businessDate,
+                'date' => $event->date,
                 'time' => $event->time,
                 'people_count' => $event->peopleCount,
             ],

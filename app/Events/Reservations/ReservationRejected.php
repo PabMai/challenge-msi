@@ -12,9 +12,8 @@ final readonly class ReservationRejected
     public function __construct(
         public string $attemptId,
         public string $reason,
-        public string $businessDate, // Y-m-d solicitado
-        public string $time,         // H:i solicitado
+        public string $date,   // Y-m-d solicitado
+        public string $time,   // H:i solicitado
         public int $peopleCount,
-    ) {
-    }
+    ) {}
 }

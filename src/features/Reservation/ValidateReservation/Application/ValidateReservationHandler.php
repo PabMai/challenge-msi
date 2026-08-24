@@ -22,8 +22,7 @@ final class ValidateReservationHandler
 {
     public function __construct(
         private readonly ScheduleValidator $validator,
-    ) {
-    }
+    ) {}
 
     /**
      * Normaliza la fecha/hora solicitada y devuelve el turno confirmado.
@@ -32,7 +31,7 @@ final class ValidateReservationHandler
     {
         return $this->validator->resolve(
             $command->now,
-            $command->businessDate,
+            $command->date,
             $command->time,
         );
     }

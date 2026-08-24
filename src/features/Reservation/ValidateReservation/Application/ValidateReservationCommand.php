@@ -10,9 +10,8 @@ namespace Features\Reservation\ValidateReservation\Application;
 final readonly class ValidateReservationCommand
 {
     public function __construct(
-        public string $businessDate, // Y-m-d solicitado
-        public string $time,         // H:i solicitado (admite madrugada)
+        public string $date,   // Y-m-d solicitado
+        public string $time,   // H:i solicitado (admite madrugada)
         public \DateTimeImmutable $now,
-    ) {
-    }
+    ) {}
 }
