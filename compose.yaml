@@ -26,6 +26,27 @@ services:
         depends_on:
             - mysql
             - redis
+    horizon:
+        image: 'sail-8.5/app'
+        container_name: 'sail-8.5-horizon'
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            - mysql
+            - redis
+        command:
+            - 'php'
+            - 'artisan'
+            - 'horizon'
     mysql:
         image: 'mysql:8.4'
         container_name: 'sail-mysql'
