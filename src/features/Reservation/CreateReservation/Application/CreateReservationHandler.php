@@ -56,7 +56,17 @@ final class CreateReservationHandler
             now: $command->now,
         ));
 
-        foreach ($this->reader->orderedLocations() as ['id' => $locationId, 'name' => $locationName]) {
+        $locations = $this->reader->orderedLocations();
+
+        if ($command->locationId !== null) {
+            // Ubicación elegida explícitamente: sin fallback a otras.
+            $locations = array_values(array_filter(
+                $locations,
+                static fn (array $location): bool => $location['id'] === $command->locationId,
+            ));
+        }
+
+        foreach ($locations as ['id' => $locationId, 'name' => $locationName]) {
             $combination = $this->combinateTables->handle(new CombinateTablesCommand(
                 availableTables: $this->reader->availableTables($locationId, $slot),
                 peopleCount: $command->peopleCount,

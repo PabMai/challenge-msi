@@ -14,5 +14,6 @@ final readonly class CreateReservationCommand
         public string $time,   // H:i solicitado (puede ser madrugada)
         public int $peopleCount,
         public \DateTimeImmutable $now,
+        public ?int $locationId = null,  // null = recorrer todas por prioridad
     ) {}
 }
