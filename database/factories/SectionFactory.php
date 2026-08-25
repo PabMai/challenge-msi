@@ -14,7 +14,10 @@ class SectionFactory extends Factory
     {
         return [
             'location_id' => fn () => Location::factory(),
-            'name' => 'Bar',
+            // Nombre único por invocación: la tabla tiene
+            // unique(location_id, name) y varios tests crean secciones
+            // implícitas bajo una misma ubicación.
+            'name' => fake()->unique()->lexify('Sección ????'),
         ];
     }
 }
