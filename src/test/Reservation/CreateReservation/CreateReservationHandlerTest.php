@@ -17,10 +17,14 @@ use Features\Reservation\ValidateReservation\Domain\ScheduleValidator;
 
 final class InMemoryReader implements AvailabilityReaderInterface
 {
-    /** @param array<int, list<AvailableTable>> $tablesByLocation */
+    /**
+     * @param array<int, list<AvailableTable>> $tablesByLocation
+     * @param array<int, array<int, list<AvailableTable>>> $tablesBySection
+     */
     public function __construct(
         private readonly array $locations,
         private readonly array $tablesByLocation,
+        private readonly array $tablesBySection = [],
     ) {
     }
 
@@ -29,8 +33,12 @@ final class InMemoryReader implements AvailabilityReaderInterface
         return $this->locations;
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot): array
+    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
     {
+        if ($sectionId !== null && isset($this->tablesBySection[$locationId][$sectionId])) {
+            return $this->tablesBySection[$locationId][$sectionId];
+        }
+
         return $this->tablesByLocation[$locationId] ?? [];
     }
 }
@@ -39,9 +47,9 @@ final class InMemoryWriter implements ReservationWriterInterface
 {
     public array $persisted = [];
 
-    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds): int
+    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, ?int $sectionId = null): int
     {
-        $this->persisted[] = compact('slot', 'peopleCount', 'locationId', 'tableIds');
+        $this->persisted[] = compact('slot', 'peopleCount', 'locationId', 'tableIds', 'sectionId');
 
         return count($this->persisted);
     }
@@ -145,6 +153,63 @@ test('rechaza la ubicacion elegida llena sin caer a otras', function () use ($fr
 
     createHandler($reader, $writer)->handle(
         new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 2),
+    );
+})->throws(InsufficientCapacityException::class);
+
+test('filtra las mesas de la seccion elegida dentro de la ubicacion', function () use ($fridayNoon) {
+    // La ubicación tiene una mesa de 8 fuera de la sección elegida:
+    // no debe usarse aunque cubra al grupo sola.
+    $reader = new InMemoryReader(
+        [['id' => 1, 'name' => 'Salón']],
+        [
+            1 => [
+                new AvailableTable(10, 'S01', 2),
+                new AvailableTable(11, 'S02', 4),
+                new AvailableTable(12, 'S03', 8),
+            ],
+        ],
+        [
+            1 => [
+                10 => [
+                    new AvailableTable(10, 'S01', 2),
+                    new AvailableTable(11, 'S02', 4),
+                ],
+                11 => [new AvailableTable(12, 'S03', 8)],
+            ],
+        ],
+    );
+    $writer = new InMemoryWriter;
+
+    $result = createHandler($reader, $writer)->handle(
+        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 1, sectionId: 10),
+    );
+
+    expect($result->tableCodes)->toBe(['S02', 'S01'])
+        ->and($result->sectionId)->toBe(10)
+        ->and($writer->persisted[0]['sectionId'])->toBe(10);
+});
+
+test('rechaza la seccion llena aunque otra de la misma ubicacion tenga lugar', function () use ($fridayNoon) {
+    $reader = new InMemoryReader(
+        [['id' => 1, 'name' => 'Salón']],
+        [
+            1 => [
+                new AvailableTable(10, 'S01', 2),
+                new AvailableTable(11, 'S02', 4),
+                new AvailableTable(12, 'S03', 8),
+            ],
+        ],
+        [
+            1 => [
+                10 => [new AvailableTable(10, 'S01', 2)],
+                11 => [new AvailableTable(12, 'S03', 8)],
+            ],
+        ],
+    );
+    $writer = new InMemoryWriter;
+
+    createHandler($reader, $writer)->handle(
+        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 1, sectionId: 10),
     );
 })->throws(InsufficientCapacityException::class);
 

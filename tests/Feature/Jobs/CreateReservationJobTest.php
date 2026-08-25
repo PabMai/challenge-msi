@@ -3,15 +3,23 @@
 use App\Jobs\CreateReservationJob;
 use App\Models\Location;
 use App\Models\ReservationAttempt;
+use App\Models\Section;
 use App\Models\Table;
 use Features\Reservation\CreateReservation\Application\CreateReservationHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+// El lector de disponibilidad cachea en Redis y las claves sobreviven a
+// RefreshDatabase: sin este flush un test puede leer mesas de otro estado.
+beforeEach(function () {
+    Cache::store('redis')->flush();
+});
 
 function jobSlot(string $date = '2026-08-21', string $time = '20:00'): array
 {
@@ -21,10 +29,13 @@ function jobSlot(string $date = '2026-08-21', string $time = '20:00'): array
 function seedSalon(): Location
 {
     $salon = Location::factory()->create(['name' => 'Salón', 'sort_order' => 1]);
+    $bar = Section::query()->create(['location_id' => $salon->id, 'name' => 'Bar']);
+    $principal = Section::query()->create(['location_id' => $salon->id, 'name' => 'Salón Principal']);
+
     Table::factory()->count(3)->sequence(
-        ['code' => 'S01', 'capacity' => 2],
-        ['code' => 'S02', 'capacity' => 4],
-        ['code' => 'S03', 'capacity' => 4],
+        ['code' => 'S01', 'capacity' => 2, 'section_id' => $bar->id],
+        ['code' => 'S02', 'capacity' => 4, 'section_id' => $principal->id],
+        ['code' => 'S03', 'capacity' => 4, 'section_id' => $principal->id],
     )->create(['location_id' => $salon->id]);
 
     return $salon;
@@ -37,9 +48,16 @@ function makePendingAttempt(array $payload): ReservationAttempt
 
 test('procesa un intento pending y lo marca confirmed con resultado', function () {
     $salon = seedSalon();
-    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 6, 'location_id' => $salon->id]);
+    $principal = Section::query()
+        ->where('location_id', $salon->id)
+        ->where('name', 'Salón Principal')
+        ->firstOrFail();
+    $attempt = makePendingAttempt([
+        'date' => '2026-08-21', 'time' => '20:00',
+        'people_count' => 6, 'location_id' => $salon->id, 'section_id' => $principal->id,
+    ]);
 
-    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 6, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00'));
+    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 6, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00'), $principal->id);
     $out = $job->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
@@ -51,6 +69,41 @@ test('procesa un intento pending y lo marca confirmed con resultado', function (
 
     expect(DB::table('reservations')->count())->toBe(1)
         ->and(DB::table('reservation_table')->where('reservation_id', $out['reservation_id'])->count())->toBe(2);
+});
+
+test('propaga la seccion elegida hasta el resultado y la reserva', function () {
+    $salon = seedSalon();
+    $principal = Section::query()
+        ->where('location_id', $salon->id)
+        ->where('name', 'Salón Principal')
+        ->firstOrFail();
+
+    $attempt = makePendingAttempt([
+        'date' => '2026-08-21', 'time' => '20:00',
+        'people_count' => 6, 'location_id' => $salon->id, 'section_id' => $principal->id,
+    ]);
+
+    $out = (new CreateReservationJob(
+        $attempt->id, '2026-08-21', '20:00', 6, $salon->id,
+        new DateTimeImmutable('2026-08-21 12:00:00'), $principal->id,
+    ))->handle(app(CreateReservationHandler::class));
+
+    expect($out['section_id'])->toBe($principal->id)
+        ->and($out['table_codes'])->toBe(['S02', 'S03'])
+        ->and((int) DB::table('reservations')->find($out['reservation_id'])->section_id)->toBe($principal->id);
+});
+
+test('sin seccion no se carga disponibilidad y el intento queda rejected', function () {
+    $salon = seedSalon();
+    $attempt = makePendingAttempt(['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2, 'location_id' => $salon->id]);
+
+    $out = (new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00')))
+        ->handle(app(CreateReservationHandler::class));
+
+    $attempt->refresh();
+    expect($out)->toBeNull()
+        ->and($attempt->status)->toBe(ReservationAttempt::STATUS_REJECTED)
+        ->and(DB::table('reservations')->count())->toBe(0);
 });
 
 test('intento ya resuelto se ignora por idempotencia', function () {
@@ -142,7 +195,8 @@ test('configuracion del job: cola tries backoff y middleware', function () {
     Queue::fake();
 
     $location = Location::factory()->create(['name' => 'Salón']);
-    CreateReservationJob::enqueue('2026-08-21', '20:00', 4, $location->id);
+    $section = Section::query()->create(['location_id' => $location->id, 'name' => 'Bar']);
+    CreateReservationJob::enqueue('2026-08-21', '20:00', 4, $location->id, $section->id);
     Queue::assertPushedOn('reservations', CreateReservationJob::class);
 
     $attempt = ReservationAttempt::query()->where('status', ReservationAttempt::STATUS_PENDING)->firstOrFail();
@@ -151,5 +205,6 @@ test('configuracion del job: cola tries backoff y middleware', function () {
         'time' => '20:00',
         'people_count' => 4,
         'location_id' => $location->id,
+        'section_id' => $section->id,
     ]);
 });

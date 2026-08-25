@@ -4,6 +4,7 @@ use App\Jobs\CreateReservationJob;
 use App\Models\Location;
 use App\Models\Reservation;
 use App\Models\ReservationAttempt;
+use App\Models\Section;
 use App\Models\Table;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -20,12 +21,16 @@ function nextFriday(): string
 
 function reservePayload(array $overrides = []): array
 {
+    $salon = Location::query()
+        ->firstOrCreate(['name' => 'Salón'], ['sort_order' => 1]);
+
     return array_merge([
         'reservation_date' => nextFriday(),
         'reservation_time' => '20:00',
         'reservation_people_count' => 4,
-        'reservation_location' => Location::query()
-            ->firstOrCreate(['name' => 'Salón'], ['sort_order' => 1])
+        'reservation_location' => $salon->id,
+        'reservation_section' => Section::query()
+            ->firstOrCreate(['location_id' => $salon->id, 'name' => 'Bar'])
             ->id,
     ], $overrides);
 }
@@ -79,7 +84,39 @@ test('POST /reserve valida campos basicos', function () {
 
     $this->postJson('/api/v1/reserve', ['reservation_date' => nextFriday()])
         ->assertStatus(422)
-        ->assertJsonValidationErrors(['reservation_time', 'reservation_people_count', 'reservation_location']);
+        ->assertJsonValidationErrors([
+            'reservation_time',
+            'reservation_people_count',
+            'reservation_location',
+            'reservation_section',
+        ]);
+});
+
+test('POST /reserve exige seccion existente y perteneciente a la ubicacion', function () {
+    Queue::fake();
+
+    $terraza = Location::factory()->create(['name' => 'Terraza', 'sort_order' => 2]);
+    $jardin = Section::query()->create(['location_id' => $terraza->id, 'name' => 'Jardín']);
+
+    // faltante
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_section' => null]))
+        ->assertStatus(422)
+        ->assertJsonPath('errors.reservation_section.0', 'La sección es obligatoria.');
+
+    // inexistente
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_section' => 99999]))
+        ->assertStatus(422)
+        ->assertJsonPath('errors.reservation_section.0', 'La sección seleccionada no existe.');
+
+    // de otra ubicación
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_section' => $jardin->id]))
+        ->assertStatus(422)
+        ->assertJsonPath('errors.reservation_section.0', 'La sección seleccionada no pertenece a la ubicación elegida.');
+
+    // no entero
+    $this->postJson('/api/v1/reserve', reservePayload(['reservation_section' => 'bar']))
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('reservation_section');
 });
 
 test('POST /reserve exige ubicacion existente', function () {

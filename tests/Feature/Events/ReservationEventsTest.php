@@ -27,7 +27,8 @@ function eventsSalon(): Location
 {
     $salon = Location::factory()->create(['name' => 'Salón', 'sort_order' => 1]);
     Location::factory()->create(['name' => 'Terraza', 'sort_order' => 2]);
-    Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
+    $section = \App\Models\Section::query()->create(['location_id' => $salon->id, 'name' => 'Bar']);
+    Table::factory()->create(['location_id' => $salon->id, 'section_id' => $section->id, 'code' => 'S01']);
 
     return $salon;
 }
@@ -48,10 +49,11 @@ function availabilityKeysCount(): int
 
 test('confirmar reserva invalida la cache de disponibilidad del turno', function () {
     $salon = eventsSalon();
+    $section = \App\Models\Section::query()->where('location_id', $salon->id)->firstOrFail();
     $reader = app(AvailabilityReaderInterface::class);
 
-    // calienta la cache para el turno (MySQL + Redis)
-    $reader->availableTables($salon->id, eventsSlot());
+    // calienta la cache para el turno (MySQL + Redis) con seccion concreta
+    $reader->availableTables($salon->id, eventsSlot(), $section->id);
     expect(availabilityKeysCount())->toBeGreaterThan(0);
 
     $attempt = ReservationAttempt::query()->create([
@@ -59,7 +61,7 @@ test('confirmar reserva invalida la cache de disponibilidad del turno', function
         'payload' => ['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2],
     ]);
 
-    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00'));
+    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00'), $section->id);
     $job->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();

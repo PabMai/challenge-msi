@@ -35,7 +35,7 @@ final class CountingInnerReader implements AvailabilityReaderInterface
         return $this->locations;
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot): array
+    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
     {
         $this->availableCalls++;
 
@@ -55,8 +55,8 @@ test('sirve la segunda lectura desde redis sin golpear mysql', function () {
     $reader = new CacheAvailabilityReader($inner);
     $slot = cacheTestSlot();
 
-    $first = $reader->availableTables(1, $slot);
-    $second = $reader->availableTables(1, $slot);
+    $first = $reader->availableTables(1, $slot, 10);
+    $second = $reader->availableTables(1, $slot, 10);
 
     expect($inner->availableCalls)->toBe(1)
         ->and($second)->toEqual($first)
@@ -68,7 +68,7 @@ test('la clave en redis expira segun el ttl de 120 segundos', function () {
     $reader = new CacheAvailabilityReader(new CountingInnerReader([new AvailableTable(10, 'S01', 4)]));
     $slot = cacheTestSlot();
 
-    $reader->availableTables(1, $slot);
+    $reader->availableTables(1, $slot, 10);
 
     // phpredis prefija los comandos pero keys() devuelve nombres completos:
     // quitamos el prefijo del cliente para que ttl() lo re-aplique correctamente
@@ -81,6 +81,34 @@ test('la clave en redis expira segun el ttl de 120 segundos', function () {
 
     expect($keys)->toHaveCount(1);
     expect($redis->ttl($keys[0]))->toBeGreaterThan(0)->toBeLessThanOrEqual(120);
+});
+
+test('secciones distintas del mismo turno no comparten entrada de cache', function () {
+    $inner = new CountingInnerReader([new AvailableTable(10, 'S01', 4)]);
+    $reader = new CacheAvailabilityReader($inner);
+    $slot = cacheTestSlot();
+
+    $reader->availableTables(1, $slot, 10);
+    $reader->availableTables(1, $slot, 10);
+    $reader->availableTables(1, $slot, 11);
+    // Sin sección concreta no se carga nada (ni golpea MySQL).
+    $reader->availableTables(1, $slot);
+
+    expect($inner->availableCalls)->toBe(2);
+
+    $keys = Redis::connection('cache')->keys('*reservations:availability:*');
+    expect(count($keys))->toBe(2);
+});
+
+test('sin seccion no carga disponibilidad ni escribe cache', function () {
+    $inner = new CountingInnerReader([new AvailableTable(10, 'S01', 4)]);
+    $reader = new CacheAvailabilityReader($inner);
+    $slot = cacheTestSlot();
+
+    expect($reader->availableTables(1, $slot))->toBe([])
+        ->and($reader->availableTables(1, $slot))->toBe([])
+        ->and($inner->availableCalls)->toBe(0)
+        ->and(Redis::connection('cache')->keys('*reservations:availability:*'))->toBe([]);
 });
 
 test('cachea tambien las ubicaciones ordenadas', function () {
@@ -103,7 +131,7 @@ test('si redis falla al leer degrada a mysql y no rompe', function () {
     $inner = new CountingInnerReader([new AvailableTable(10, 'S01', 4)]);
     $reader = new CacheAvailabilityReader($inner);
 
-    $tables = $reader->availableTables(1, cacheTestSlot());
+    $tables = $reader->availableTables(1, cacheTestSlot(), 10);
 
     expect($inner->availableCalls)->toBe(1)
         ->and(array_map(fn ($t) => $t->code, $tables))->toBe(['S01']);
@@ -120,7 +148,7 @@ test('si redis falla al escribir devuelve igualmente el dato fresco', function (
     $inner = new CountingInnerReader([new AvailableTable(10, 'S01', 4)]);
     $reader = new CacheAvailabilityReader($inner);
 
-    $tables = $reader->availableTables(1, cacheTestSlot());
+    $tables = $reader->availableTables(1, cacheTestSlot(), 10);
 
     expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01']);
     Log::shouldHaveReceived('warning')->once();

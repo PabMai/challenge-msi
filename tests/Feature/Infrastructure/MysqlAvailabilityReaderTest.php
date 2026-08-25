@@ -58,6 +58,19 @@ test('excluye mesas con reserva que se solapa con el turno', function () {
     expect(array_map(fn ($t) => $t->code, $tables))->toBe([$libre->code]);
 });
 
+test('con seccion indicada devuelve solo las mesas de esa seccion', function () {
+    $salon = App\Models\Location::factory()->create();
+    $bar = App\Models\Section::query()->create(['location_id' => $salon->id, 'name' => 'Bar']);
+    $principal = App\Models\Section::query()->create(['location_id' => $salon->id, 'name' => 'Salón Principal']);
+
+    App\Models\Table::factory()->create(['location_id' => $salon->id, 'section_id' => $bar->id, 'code' => 'S01']);
+    App\Models\Table::factory()->create(['location_id' => $salon->id, 'section_id' => $principal->id, 'code' => 'S02']);
+
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'), $bar->id);
+
+    expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01']);
+});
+
 test('no excluye reservas de otro business_date ni turnos contiguos', function () {
     $salon = App\Models\Location::factory()->create();
     $otroDia = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
