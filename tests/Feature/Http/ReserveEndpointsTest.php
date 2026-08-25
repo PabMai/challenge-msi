@@ -175,8 +175,9 @@ test('GET attempt con uuid invalido devuelve 404', function () {
 
 test('GET /reservations lista las reservas de una fecha con ubicacion y mesas', function () {
     $salon = Location::factory()->create(['name' => 'Salón', 'sort_order' => 1]);
-    $t1 = Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
-    $t2 = Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+    $seccion = Section::query()->create(['location_id' => $salon->id, 'name' => 'Salón Principal']);
+    $t1 = Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S01']);
+    $t2 = Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S02', 'capacity' => 4]);
 
     $r = Reservation::create([
         'business_date' => '2026-08-21',
@@ -184,6 +185,7 @@ test('GET /reservations lista las reservas de una fecha con ubicacion y mesas', 
         'ends_at' => '2026-08-21 22:00:00',
         'people_count' => 6,
         'location_id' => $salon->id,
+        'section_id' => $seccion->id,
     ]);
     $r->tables()->attach([$t1->id, $t2->id]);
 
@@ -193,6 +195,7 @@ test('GET /reservations lista las reservas de una fecha con ubicacion y mesas', 
         'ends_at' => '2026-08-22 22:00:00',
         'people_count' => 2,
         'location_id' => $salon->id,
+        'section_id' => $seccion->id,
     ]);
 
     $this->getJson('/api/v1/reservations?date=2026-08-21')

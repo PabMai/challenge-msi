@@ -33,9 +33,9 @@ final class InMemoryReader implements AvailabilityReaderInterface
         return $this->locations;
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
+    public function availableTables(int $locationId, ServiceSlot $slot, int $sectionId): array
     {
-        if ($sectionId !== null && isset($this->tablesBySection[$locationId][$sectionId])) {
+        if (isset($this->tablesBySection[$locationId][$sectionId])) {
             return $this->tablesBySection[$locationId][$sectionId];
         }
 
@@ -47,7 +47,7 @@ final class InMemoryWriter implements ReservationWriterInterface
 {
     public array $persisted = [];
 
-    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, ?int $sectionId = null): int
+    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, int $sectionId): int
     {
         $this->persisted[] = compact('slot', 'peopleCount', 'locationId', 'tableIds', 'sectionId');
 
@@ -80,7 +80,7 @@ test('crea reserva delegando la validacion de horario a ValidateReservation', fu
     $writer = new InMemoryWriter;
 
     $result = createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 3, $fridayNoon),
+        new CreateReservationCommand('2026-08-21', '20:00', 3, 100, $fridayNoon),
     );
 
     expect($result->reservationId)->toBe(1)
@@ -99,7 +99,7 @@ test('pasa a la siguiente ubicacion cuando la primera no tiene mesas', function 
     $writer = new InMemoryWriter;
 
     $result = createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon),
+        new CreateReservationCommand('2026-08-21', '20:00', 6, 100, $fridayNoon),
     );
 
     expect($result->locationName)->toBe('Terraza')
@@ -113,7 +113,7 @@ test('lanza InsufficientCapacity cuando ninguna ubicacion cubre al grupo', funct
     );
 
     createHandler($reader, new InMemoryWriter)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 8, $fridayNoon),
+        new CreateReservationCommand('2026-08-21', '20:00', 8, 100, $fridayNoon),
     );
 })->throws(InsufficientCapacityException::class);
 
@@ -130,7 +130,7 @@ test('respeta la ubicacion elegida aunque otra tenga disponibilidad', function (
     $writer = new InMemoryWriter;
 
     $result = createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 4, $fridayNoon, locationId: 2),
+        new CreateReservationCommand('2026-08-21', '20:00', 4, 100, $fridayNoon, locationId: 2),
     );
 
     expect($result->locationName)->toBe('Terraza')
@@ -152,7 +152,7 @@ test('rechaza la ubicacion elegida llena sin caer a otras', function () use ($fr
     $writer = new InMemoryWriter;
 
     createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 2),
+        new CreateReservationCommand('2026-08-21', '20:00', 6, 100, $fridayNoon, locationId: 2),
     );
 })->throws(InsufficientCapacityException::class);
 
@@ -181,7 +181,7 @@ test('filtra las mesas de la seccion elegida dentro de la ubicacion', function (
     $writer = new InMemoryWriter;
 
     $result = createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 1, sectionId: 10),
+        new CreateReservationCommand('2026-08-21', '20:00', 6, 10, $fridayNoon, locationId: 1),
     );
 
     expect($result->tableCodes)->toBe(['S02', 'S01'])
@@ -209,7 +209,7 @@ test('rechaza la seccion llena aunque otra de la misma ubicacion tenga lugar', f
     $writer = new InMemoryWriter;
 
     createHandler($reader, $writer)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 6, $fridayNoon, locationId: 1, sectionId: 10),
+        new CreateReservationCommand('2026-08-21', '20:00', 6, 10, $fridayNoon, locationId: 1),
     );
 })->throws(InsufficientCapacityException::class);
 
@@ -218,7 +218,7 @@ test('propaga el cutoff desde la feature de validacion', function () use ($frida
     $reader = new InMemoryReader([['id' => 1, 'name' => 'Salón']], [1 => []]);
 
     createHandler($reader, new InMemoryWriter)->handle(
-        new CreateReservationCommand('2026-08-21', '21:00', 2, new DateTimeImmutable('2026-08-21 20:50:00')),
+        new CreateReservationCommand('2026-08-21', '21:00', 2, 100, new DateTimeImmutable('2026-08-21 20:50:00')),
     );
 })->throws(CutoffExceededException::class);
 
@@ -226,7 +226,7 @@ test('rechaza grupos vacios antes de validar horario', function () {
     $reader = new InMemoryReader([], []);
 
     createHandler($reader, new InMemoryWriter)->handle(
-        new CreateReservationCommand('2026-08-21', '20:00', 0, $fridayNoon ?? new DateTimeImmutable),
+        new CreateReservationCommand('2026-08-21', '20:00', 0, 100, $fridayNoon ?? new DateTimeImmutable),
     );
 })->throws(InvalidArgumentException::class);
 

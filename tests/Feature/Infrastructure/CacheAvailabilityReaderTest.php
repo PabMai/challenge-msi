@@ -35,7 +35,7 @@ final class CountingInnerReader implements AvailabilityReaderInterface
         return $this->locations;
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
+    public function availableTables(int $locationId, ServiceSlot $slot, int $sectionId): array
     {
         $this->availableCalls++;
 
@@ -91,24 +91,11 @@ test('secciones distintas del mismo turno no comparten entrada de cache', functi
     $reader->availableTables(1, $slot, 10);
     $reader->availableTables(1, $slot, 10);
     $reader->availableTables(1, $slot, 11);
-    // Sin sección concreta no se carga nada (ni golpea MySQL).
-    $reader->availableTables(1, $slot);
 
     expect($inner->availableCalls)->toBe(2);
 
     $keys = Redis::connection('cache')->keys('*reservations:availability:*');
     expect(count($keys))->toBe(2);
-});
-
-test('sin seccion no carga disponibilidad ni escribe cache', function () {
-    $inner = new CountingInnerReader([new AvailableTable(10, 'S01', 4)]);
-    $reader = new CacheAvailabilityReader($inner);
-    $slot = cacheTestSlot();
-
-    expect($reader->availableTables(1, $slot))->toBe([])
-        ->and($reader->availableTables(1, $slot))->toBe([])
-        ->and($inner->availableCalls)->toBe(0)
-        ->and(Redis::connection('cache')->keys('*reservations:availability:*'))->toBe([]);
 });
 
 test('cachea tambien las ubicaciones ordenadas', function () {

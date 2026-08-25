@@ -2,7 +2,6 @@
 
 use App\Infrastructure\Reservations\MysqlAvailabilityReader;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -15,6 +14,14 @@ function makeSlot(string $date, string $start, string $end): Features\Reservatio
     );
 }
 
+function seedSection(App\Models\Location|int $location, string $name = 'Salón Principal'): App\Models\Section
+{
+    return App\Models\Section::query()->create([
+        'location_id' => $location instanceof App\Models\Location ? $location->id : $location,
+        'name' => $name,
+    ]);
+}
+
 test('ordena las ubicaciones por sort_order', function () {
     App\Models\Location::create(['name' => 'Terraza', 'sort_order' => 2]);
     App\Models\Location::create(['name' => 'Salón', 'sort_order' => 1]);
@@ -25,14 +32,17 @@ test('ordena las ubicaciones por sort_order', function () {
         ->and(array_column($locations, 'id'))->each->toBeInt();
 });
 
-test('devuelve solo mesas de la ubicacion ordenadas por codigo', function () {
+test('devuelve solo mesas de la ubicacion y seccion ordenadas por codigo', function () {
     $salon = App\Models\Location::factory()->create(['name' => 'Salón', 'sort_order' => 1]);
     $terraza = App\Models\Location::factory()->create(['name' => 'Terraza', 'sort_order' => 2]);
-    App\Models\Table::factory()->create(['location_id' => $terraza->id, 'code' => 'T01']);
-    App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
-    App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
+    $seccion = seedSection($salon);
+    $otraSeccion = seedSection($terraza, 'Jardín');
 
-    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'));
+    App\Models\Table::factory()->create(['section_id' => $otraSeccion->id, 'code' => 'T01']);
+    App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S02', 'capacity' => 4]);
+    App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S01']);
+
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'), $seccion->id);
 
     expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01', 'S02'])
         ->and($tables[1])->capacity->toBe(4);
@@ -40,8 +50,9 @@ test('devuelve solo mesas de la ubicacion ordenadas por codigo', function () {
 
 test('excluye mesas con reserva que se solapa con el turno', function () {
     $salon = App\Models\Location::factory()->create();
-    $libre = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
-    $ocupada = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+    $seccion = seedSection($salon);
+    $libre = App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S01']);
+    $ocupada = App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S02', 'capacity' => 4]);
 
     $reserva = App\Models\Reservation::create([
         'business_date' => '2026-08-21',
@@ -49,22 +60,23 @@ test('excluye mesas con reserva que se solapa con el turno', function () {
         'ends_at' => '2026-08-21 22:00:00',
         'people_count' => 4,
         'location_id' => $salon->id,
+        'section_id' => $seccion->id,
     ]);
     $reserva->tables()->attach([$ocupada->id]);
 
     // el turno solicitado 21:00-23:00 solapa con la reserva existente 20:00-22:00
-    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '21:00', '23:00'));
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '21:00', '23:00'), $seccion->id);
 
     expect(array_map(fn ($t) => $t->code, $tables))->toBe([$libre->code]);
 });
 
-test('con seccion indicada devuelve solo las mesas de esa seccion', function () {
+test('devuelve solo las mesas de la seccion indicada', function () {
     $salon = App\Models\Location::factory()->create();
-    $bar = App\Models\Section::query()->create(['location_id' => $salon->id, 'name' => 'Bar']);
-    $principal = App\Models\Section::query()->create(['location_id' => $salon->id, 'name' => 'Salón Principal']);
+    $bar = seedSection($salon, 'Bar');
+    $principal = seedSection($salon, 'Salón Principal');
 
-    App\Models\Table::factory()->create(['location_id' => $salon->id, 'section_id' => $bar->id, 'code' => 'S01']);
-    App\Models\Table::factory()->create(['location_id' => $salon->id, 'section_id' => $principal->id, 'code' => 'S02']);
+    App\Models\Table::factory()->create(['section_id' => $bar->id, 'code' => 'S01']);
+    App\Models\Table::factory()->create(['section_id' => $principal->id, 'code' => 'S02']);
 
     $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'), $bar->id);
 
@@ -73,8 +85,9 @@ test('con seccion indicada devuelve solo las mesas de esa seccion', function () 
 
 test('no excluye reservas de otro business_date ni turnos contiguos', function () {
     $salon = App\Models\Location::factory()->create();
-    $otroDia = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S01']);
-    $contigua = App\Models\Table::factory()->create(['location_id' => $salon->id, 'code' => 'S02', 'capacity' => 4]);
+    $seccion = seedSection($salon);
+    $otroDia = App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S01']);
+    $contigua = App\Models\Table::factory()->create(['section_id' => $seccion->id, 'code' => 'S02', 'capacity' => 4]);
 
     // S01 ocupada el sábado (otro business_date)
     $r1 = App\Models\Reservation::create([
@@ -83,6 +96,7 @@ test('no excluye reservas de otro business_date ni turnos contiguos', function (
         'ends_at' => '2026-08-22 22:00:00',
         'people_count' => 2,
         'location_id' => $salon->id,
+        'section_id' => $seccion->id,
     ]);
     $r1->tables()->attach([$otroDia->id]);
 
@@ -93,10 +107,11 @@ test('no excluye reservas de otro business_date ni turnos contiguos', function (
         'ends_at' => '2026-08-21 20:00:00',
         'people_count' => 2,
         'location_id' => $salon->id,
+        'section_id' => $seccion->id,
     ]);
     $r2->tables()->attach([$contigua->id]);
 
-    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'));
+    $tables = (new MysqlAvailabilityReader)->availableTables($salon->id, makeSlot('2026-08-21', '20:00', '22:00'), $seccion->id);
 
     expect(array_map(fn ($t) => $t->code, $tables))->toBe(['S01', 'S02']);
 });

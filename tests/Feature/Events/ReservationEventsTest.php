@@ -58,10 +58,10 @@ test('confirmar reserva invalida la cache de disponibilidad del turno', function
 
     $attempt = ReservationAttempt::query()->create([
         'status' => ReservationAttempt::STATUS_PENDING,
-        'payload' => ['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2],
+        'payload' => ['date' => '2026-08-21', 'time' => '20:00', 'people_count' => 2, 'location_id' => $salon->id, 'section_id' => $section->id],
     ]);
 
-    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00'), $section->id);
+    $job = new CreateReservationJob($attempt->id, '2026-08-21', '20:00', 2, $salon->id, $section->id, new DateTimeImmutable('2026-08-21 12:00:00'));
     $job->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
@@ -87,10 +87,10 @@ test('el rechazo registra el motivo con contexto de la solicitud', function () {
 
     $attempt = ReservationAttempt::query()->create([
         'status' => ReservationAttempt::STATUS_PENDING,
-        'payload' => ['date' => '2026-08-21', 'time' => '23:30', 'people_count' => 2, 'location_id' => $salon->id],
+        'payload' => ['date' => '2026-08-21', 'time' => '23:30', 'people_count' => 2, 'location_id' => $salon->id, 'section_id' => 999],
     ]);
 
-    (new CreateReservationJob($attempt->id, '2026-08-21', '23:30', 2, $salon->id, new DateTimeImmutable('2026-08-21 12:00:00')))
+    (new CreateReservationJob($attempt->id, '2026-08-21', '23:30', 2, $salon->id, 999, new DateTimeImmutable('2026-08-21 12:00:00')))
         ->handle(app(CreateReservationHandler::class));
 
     $attempt->refresh();
