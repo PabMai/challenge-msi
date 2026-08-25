@@ -1,58 +1,185 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Challenge MSI — Sistema de Reservas de Restaurante
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+![PHP](https://img.shields.io/badge/PHP-8.3%2B-777BB4?logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1?logo=mysql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-Cache%20%2B%20Queue-DC382D?logo=redis&logoColor=white)
+![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?logo=bootstrap&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Pest](https://img.shields.io/badge/Tested%20with-Pest-B7178C)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## About Laravel
+Aplicación web de reservas de mesas para restaurante: el cliente elige **fecha, hora, cantidad de personas, ubicación y sección**; la solicitud se procesa de forma **asíncrona** mediante colas, combinando automáticamente las mesas disponibles según su capacidad.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 📑 Tabla de Contenido
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- [Descripción](#-descripción)
+- [Características](#-características)
+- [Tecnologías Utilizadas](#-tecnologías-utilizadas)
+- [Arquitectura](#-arquitectura)
+- [Prerrequisitos](#-prerrequisitos)
+- [Instalación y Configuración](#-instalación-y-configuración)
+- [API REST](#-api-rest)
+- [Tests](#-tests)
 
-## Learning Laravel
+## 💡 Descripción
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Challenge MSI resuelve la gestión de reservas de un restaurante con múltiples ubicaciones (Salón, Terraza) divididas en secciones (Bar, Salón Principal, Jardín, Área Infantil).
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+El flujo es completamente **asíncrono**: al enviar el formulario, la petición devuelve un identificador de intento (`attempt_url`) y queda encolada en Redis. Un worker de **Horizon** procesa la reserva consultando la disponibilidad del turno, calculando la mejor combinación de mesas que cubra a los comensales y persistiendo el resultado. El frontend consulta periódicamente el estado del intento hasta obtener la confirmación (con las mesas asignadas) o el rechazo (con su motivo).
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+La lógica de negocio vive desacoplada del framework en módulos de dominio (`src/features`), comunicándose con Laravel únicamente a través de puertos (interfaces) e implementaciones concretas (adapters).
 
-## Agentic Development
+## ✨ Características
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+- **Reservas asíncronas** — Alta en cola con respuesta `202 Accepted` + *polling* del estado del intento (`pending → confirmed | rejected | failed`) con idempotencia garantizada.
+- **Combinador óptimo de mesas** — Algoritmo *best-fit decreasing* que combina hasta N mesas respetando capacidades mínimas y desperdicio mínimo; rechazo temprano si ningún conjunto alcanza el cupo.
+- **Ubicaciones y secciones obligatorias** — Selección en cascada (la sección depende de la ubicación); una reserva nunca carece de sección ni hace *fallback* entre ubicaciones.
+- **Cache de disponibilidad en Redis** — Lectura de disponibilidad por sección con TTL de 120s e invalidación dirigida por eventos al confirmar/rechazar reservas.
+- **Agenda sin filtros** — Página `/agenda` que lista todas las reservas (ubicación, sección y mesas) usando **una única consulta SQL optimizada** con `GROUP_CONCAT`.
+- **API REST v1** — Endpoints para crear reservas, consultar intentos y listar reservas por fecha.
+- **UI responsive** — Bootstrap 5 con componentes Blade reutilizables (atoms/molecules/organisms), modal de resultado y validaciones traducidas al español.
 
-```bash
-composer require laravel/boost --dev
+## 🛠 Tecnologías Utilizadas
 
-php artisan boost:install
+| Capa | Tecnología |
+|------|------------|
+| Backend | PHP 8.3+ · Laravel 13 |
+| Colas & Workers | Laravel Horizon · Redis |
+| Base de Datos | MySQL 8.4 |
+| Cache | Redis (TTL + invalidación por eventos) |
+| Frontend | Blade · Bootstrap 5.3 · Vanilla JS (ES modules) |
+| Build | Vite 8 · Sass |
+| Testing | Pest 5 · Mockery · Faker |
+| Entorno | Laravel Sail (Docker) |
+
+## 🏗 Arquitectura
+
+```
+├── app/                        # Capa Laravel (HTTP, Jobs, Listeners, Infraestructura)
+│   ├── Http/Controllers/       #   API v1 + páginas web
+│   ├── Infrastructure/         #   Adapters: readers/writers Eloquent, cache y SQL puro
+│   ├── Jobs/                   #   CreateReservationJob (cola `reservations`)
+│   └── Listeners/              #   Invalidación de cache y logging de rechazos
+├── resources/
+│   ├── js/reservations.js      # Flujo asíncrono del formulario (fetch + polling)
+│   └── views/                  # Componentes atom/molecule/organism + pages
+├── src/
+│   ├── features/Reservation/   # CreateReservation (handler/command/port/result)
+│   │                           # ValidateReservation (horarios, cutoff, slot)
+│   ├── features/Table/         # CombinateTable (algoritmo de combinación)
+│   └── test/                   # Tests unitarios del dominio (in-memory doubles)
+└── tests/Feature/              # Tests de integración HTTP, Jobs, Events, Infrastructure
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+El dominio no conoce Eloquent ni HTTP: los handlers dependen de interfaces (`AvailabilityReaderInterface`, `ReservationWriterInterface`) que los adapters implementan, lo que permite testear la lógica con dobles en memoria.
 
-## Contributing
+## 📋 Prerrequisitos
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (con WSL2 en Windows)
+- [Composer](https://getcomposer.org/) 2.x
+- Node.js 20+ y npm (para compilar assets)
+- Git
 
-## Code of Conduct
+> Alternativa: PHP 8.3+, Composer, MySQL 8.4 y Redis locales sin Docker.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## 🚀 Instalación y Configuración
 
-## Security Vulnerabilities
+### 1. Clonar el repositorio
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+git clone <url-del-repositorio> challenge-msi
+cd challenge-msi
+```
 
-## License
+### 2. Instalar dependencias PHP
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+composer install
+```
+
+### 3. Configurar el entorno
+
+```bash
+cp .env.example .env
+```
+
+Variables clave (ya provistas por defecto):
+
+```dotenv
+APP_PORT=9090            # Puerto público de la app
+DB_CONNECTION=mysql
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+REDIS_CLIENT=phpredis
+```
+
+Generar la clave de aplicación:
+
+```bash
+./vendor/bin/sail artisan key:generate
+```
+
+### 4. Levantar los contenedores
+
+```bash
+./vendor/bin/sail up -d
+```
+
+Esto inicia cuatro servicios: **app** (nginx+php-fpm en el puerto `9090`), **horizon** (worker de la cola `reservations`), **mysql** (8.4) y **redis**.
+
+### 5. Migraciones y datos semilla
+
+```bash
+./vendor/bin/sail artisan migrate --seed
+```
+
+El seeder crea las ubicaciones y secciones junto con sus mesas:
+
+| Ubicación | Sección | Mesas |
+|-----------|---------|-------|
+| Salón | Bar | S01–S03 |
+| Salón | Salón Principal | S04–S10 |
+| Terraza | Jardín | T01–T03 |
+| Terraza | Área Infantil | T04–T05 |
+
+### 6. Compilar assets del frontend
+
+```bash
+npm install && npm run build     # producción
+npm run dev                      # desarrollo (watch)
+```
+
+### 7. Verificar la instalación
+
+Abrir <http://localhost:9090> y crear una reserva de prueba; el modal confirmará las mesas asignadas. La agenda completa está disponible en <http://localhost:9090/agenda>.
+
+## 🔌 API REST
+
+Base URL: `http://localhost:9090/api/v1`
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/reserve` | Crea un intento de reserva y lo encola. Devuelve `202` con `attempt_url`. Rate-limit 30/min. |
+| `GET` | `/reserve/attempts/{uuid}` | Estado del intento y resultado (mesas asignadas o motivo del rechazo). |
+| `GET` | `/reservations?date=Y-m-d` | Reservas de una fecha con ubicación, sección y mesas (consulta SQL única). |
+
+Ejemplo de creación:
+
+```bash
+curl -X POST http://localhost:9090/api/v1/reserve \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"reservation_date":"2026-08-28","reservation_time":"20:00","reservation_people_count":"4","reservation_location":"1","reservation_section":"1"}'
+```
+
+## 🧪 Tests
+
+La suite incluye pruebas unitarias del dominio (con dobles en memoria) y de integración (HTTP, jobs, eventos, infraestructura):
+
+```bash
+./vendor/bin/sail pest          # suite completa
+./vendor/bin/sail pest --parallel
+./vendor/bin/sail pint          # estilo de código
+```
