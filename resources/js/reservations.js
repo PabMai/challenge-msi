@@ -74,6 +74,22 @@ const initSectionCascade = (form) => {
     applyFilter();
 };
 
+const resetFormFields = (form) => {
+    form.querySelectorAll('input').forEach((input) => {
+        input.value = '';
+    });
+
+    clearFieldErrors(form);
+
+    // Vaciar ubicación y disparar change para que el cascade deshabilite
+    // la sección y restaure su placeholder.
+    const locationSelect = form.querySelector('[data-reservation-location-select]');
+    if (locationSelect) {
+        locationSelect.value = '';
+        locationSelect.dispatchEvent(new Event('change'));
+    }
+};
+
 const renderFieldErrors = (form, errors) => {
     Object.entries(errors).forEach(([field, messages]) => {
         const input = form.querySelector(`[name="${field}"]`);
@@ -256,11 +272,15 @@ class ReservationFormController {
             ? ` Mesas asignadas: ${result.table_codes.join(', ')}.`
             : '';
         const schedule = `${String(result.starts_at).slice(11, 16)}–${String(result.ends_at).slice(11, 16)}`;
+        const place = result.section_name
+            ? `${result.location_name} · ${result.section_name}`
+            : result.location_name;
         const body =
-            `Tu reserva quedó registrada en ${result.location_name}: ${result.people_count} persona(s), ` +
+            `Tu reserva quedó registrada en ${place}: ${result.people_count} persona(s), ` +
             `${schedule}.${tables}`;
 
         this.#showOutcome('success', body);
+        resetFormFields(this.form);
     }
 }
 
