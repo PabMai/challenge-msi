@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Reservation;
+use App\Infrastructure\Reservations\DailyAgendaQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
  * Listado de reservas por fecha de servicio.
  *
  * GET /reservations?date=YYYY-MM-DD
+ * Una sola consulta SQL (ubicación + sección + mesas agregadas).
  */
 final class ReservationsByDateController extends Controller
 {
@@ -22,33 +23,47 @@ final class ReservationsByDateController extends Controller
             'date' => ['required', 'date_format:Y-m-d'],
         ]);
 
-        $reservations = Reservation::query()
-            ->with(['location', 'tables'])
-            ->where('business_date', $validated['date'])
-            ->orderBy('starts_at')
-            ->get()
-            ->map(static fn (Reservation $r): array => [
-                'id' => $r->id,
-                'business_date' => $r->business_date->format('Y-m-d'),
-                'starts_at' => $r->starts_at->format('H:i'),
-                'ends_at' => $r->ends_at->format('H:i'),
-                'people_count' => $r->people_count,
-                'location' => [
-                    'id' => $r->location->id,
-                    'name' => $r->location->name,
-                ],
-                'tables' => $r->tables->map(static fn ($t): array => [
-                    'code' => $t->code,
-                    'capacity' => $t->capacity,
-                ])->values()->all(),
-            ])
-            ->values()
-            ->all();
+        $rows = (new DailyAgendaQuery)->forDate($validated['date']);
 
         return response()->json([
             'date' => $validated['date'],
-            'total' => count($reservations),
-            'reservations' => $reservations,
+            'total' => count($rows),
+            'reservations' => array_map(static fn (array $row): array => [
+                'id' => $row['id'],
+                'business_date' => $row['business_date'],
+                'starts_at' => $row['start_time'],
+                'ends_at' => $row['end_time'],
+                'people_count' => $row['people_count'],
+                'location' => [
+                    'id' => $row['location_id'],
+                    'name' => $row['location_name'],
+                ],
+                'section' => [
+                    'id' => $row['section_id'],
+                    'name' => $row['section_name'],
+                ],
+                'tables' => self::zipTables($row['table_codes'], $row['table_capacities']),
+            ], $rows),
         ]);
+    }
+
+    /**
+     * Combina los códigos y capacidades agregados en paralelo.
+     *
+     * @return list<array{code: string, capacity: int}>
+     */
+    private static function zipTables(string $codes, string $capacities): array
+    {
+        $codeList = $codes === '' ? [] : explode(', ', $codes);
+        $capacityList = $capacities === '' ? [] : explode(', ', $capacities);
+
+        return array_values(array_map(
+            static fn (string $code, string $capacity): array => [
+                'code' => $code,
+                'capacity' => (int) $capacity,
+            ],
+            $codeList,
+            $capacityList,
+        ));
     }
 }
