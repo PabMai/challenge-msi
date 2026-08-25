@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Models\Section;
 use App\Rules\SchedulableSlot;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -31,6 +33,20 @@ class CreateReservationRequest extends FormRequest
             'reservation_time' => ['required', 'date_format:H:i', new SchedulableSlot],
             'reservation_people_count' => ['required', 'integer', 'min:1'],
             'reservation_location' => ['required', 'integer', 'exists:locations,id'],
+            'reservation_section' => [
+                'required',
+                'integer',
+                'exists:sections,id',
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    // Solo falla si la sección existe pero es de otra ubicación
+                    // (así no se duplica el mensaje del exists).
+                    $section = Section::query()->find($value);
+
+                    if ($section !== null && (int) $this->input('reservation_location') !== $section->location_id) {
+                        $fail('La sección seleccionada no pertenece a la ubicación elegida.');
+                    }
+                },
+            ],
         ];
     }
 
@@ -50,6 +66,9 @@ class CreateReservationRequest extends FormRequest
             'reservation_location.required' => 'La ubicación es obligatoria.',
             'reservation_location.integer' => 'La ubicación debe ser un identificador válido.',
             'reservation_location.exists' => 'La ubicación seleccionada no existe.',
+            'reservation_section.required' => 'La sección es obligatoria.',
+            'reservation_section.integer' => 'La sección debe ser un identificador válido.',
+            'reservation_section.exists' => 'La sección seleccionada no existe.',
         ];
     }
 }

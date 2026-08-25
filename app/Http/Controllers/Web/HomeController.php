@@ -17,6 +17,7 @@ final class HomeController extends Controller
     {
         return view('pages.index', [
             'locations' => Location::query()
+                ->with(['sections' => fn ($query) => $query->orderBy('id')])
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
         ]);
