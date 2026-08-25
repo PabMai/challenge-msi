@@ -56,6 +56,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
      * @param  non-empty-string  $time  H:i solicitado
      * @param  non-negative-int  $peopleCount
      * @param  positive-int  $locationId  ubicación elegida por el cliente (sin fallback)
+     * @param  positive-int|null  $sectionId  sección elegida dentro de la ubicación (sin fallback)
      */
     public function __construct(
         public readonly string $attemptId,
@@ -64,6 +65,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
         public readonly int $peopleCount,
         public readonly int $locationId,
         public readonly ?\DateTimeImmutable $now = null,
+        public readonly ?int $sectionId = null,
     ) {
         $this->queue = 'reservations';
     }
@@ -71,7 +73,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
     /**
      * Crea el intento en base de datos y encola el job.
      */
-    public static function enqueue(string $date, string $time, int $peopleCount, int $locationId): self
+    public static function enqueue(string $date, string $time, int $peopleCount, int $locationId, ?int $sectionId = null): self
     {
         $attempt = ReservationAttempt::query()->create([
             'status' => ReservationAttempt::STATUS_PENDING,
@@ -80,11 +82,12 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
                 'time' => $time,
                 'people_count' => $peopleCount,
                 'location_id' => $locationId,
+                'section_id' => $sectionId,
             ],
         ]);
 
         return tap(
-            new self($attempt->id, $date, $time, $peopleCount, $locationId),
+            new self($attempt->id, $date, $time, $peopleCount, $locationId, null, $sectionId),
             fn (self $job) => dispatch($job),
         );
     }
@@ -124,6 +127,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
                 peopleCount: $this->peopleCount,
                 now: $this->now ?? now()->toDateTimeImmutable(),
                 locationId: $this->locationId,
+                sectionId: $this->sectionId,
             ));
         } catch (
             InvalidPartySizeException
@@ -190,6 +194,7 @@ final class CreateReservationJob implements ShouldBeUniqueUntilProcessing, Shoul
             'reservation_id' => $result->reservationId,
             'location_id' => $result->locationId,
             'location_name' => $result->locationName,
+            'section_id' => $result->sectionId,
             'people_count' => $result->peopleCount,
             'starts_at' => $result->slot->startsAt->format(DATE_ATOM),
             'ends_at' => $result->slot->endsAt->format(DATE_ATOM),
