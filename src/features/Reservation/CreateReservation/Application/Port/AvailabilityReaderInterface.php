@@ -22,7 +22,10 @@ interface AvailabilityReaderInterface
     /**
      * Mesas de la ubicación libres para el turno completo.
      *
+     * Cuando se indica una sección, solo devuelve mesas de esa sección
+     * (sin caer a otras secciones de la misma ubicación).
+     *
      * @return list<AvailableTable>
      */
-    public function availableTables(int $locationId, ServiceSlot $slot): array;
+    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array;
 }

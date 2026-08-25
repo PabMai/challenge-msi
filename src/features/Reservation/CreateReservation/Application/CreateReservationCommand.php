@@ -15,5 +15,6 @@ final readonly class CreateReservationCommand
         public int $peopleCount,
         public \DateTimeImmutable $now,
         public ?int $locationId = null,  // null = recorrer todas por prioridad
+        public ?int $sectionId = null,   // null = todas las secciones de la ubicación
     ) {}
 }

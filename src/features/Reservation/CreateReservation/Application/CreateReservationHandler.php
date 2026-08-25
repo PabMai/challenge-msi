@@ -68,7 +68,7 @@ final class CreateReservationHandler
 
         foreach ($locations as ['id' => $locationId, 'name' => $locationName]) {
             $combination = $this->combinateTables->handle(new CombinateTablesCommand(
-                availableTables: $this->reader->availableTables($locationId, $slot),
+                availableTables: $this->reader->availableTables($locationId, $slot, $command->sectionId),
                 peopleCount: $command->peopleCount,
                 maxTables: $this->maxTablesPerReservation,
             ));
@@ -85,6 +85,7 @@ final class CreateReservationHandler
                     static fn ($table) => $table->id,
                     $combination,
                 ),
+                $command->sectionId,
             );
 
             return new CreateReservationResult(
@@ -94,6 +95,7 @@ final class CreateReservationHandler
                 peopleCount: $command->peopleCount,
                 slot: $slot,
                 tableCodes: array_map(static fn ($table) => $table->code, $combination),
+                sectionId: $command->sectionId,
             );
         }
 
