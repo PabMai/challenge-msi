@@ -8,6 +8,10 @@
 
         <div data-reservation-result class="mb-3 d-none"></div>
         <x-molecule.card-body>
+                <x-atom.alert variant="secondary" class="mb-3">
+                    <p class="mb-0">Las secciones dependen de la ubicación elegida.</p>
+                </x-atom.alert>
+
             <x-molecule.field>
                 <x-atom.label for="reservation_date" class="col-sm-3">Fecha de reserva</x-atom.label>
                 <div class="col-sm-9">
@@ -39,7 +43,8 @@
                 <x-molecule.field>
                     <x-atom.label for="reservation_location" class="col-sm-3">Ubicación</x-atom.label>
                     <div class="col-sm-9">
-                        <x-atom.select id="reservation_location" name="reservation_location">
+                        <x-atom.select id="reservation_location" name="reservation_location"
+                            data-reservation-location-select>
                             <option value="" @selected(old('reservation_location') === null)>Seleccionar ubicación</option>
                             @foreach ($locations as $location)
                                 <option value="{{ $location->id }}"
@@ -49,6 +54,25 @@
                             @endforeach
                         </x-atom.select>
                         <x-atom.invalid-feedback data-reservation-error="reservation_location"></x-atom.invalid-feedback>
+                    </div>
+                </x-molecule.field>
+
+                <x-molecule.field>
+                    <x-atom.label for="reservation_section" class="col-sm-3">Sección</x-atom.label>
+                    <div class="col-sm-9">
+                        <x-atom.select id="reservation_section" name="reservation_section" disabled
+                            data-reservation-section-select>
+                            <option value="">Seleccionar sección</option>
+                            @foreach ($locations as $location)
+                                @foreach ($location->sections as $section)
+                                    <option value="{{ $section->id }}" data-location-id="{{ $location->id }}"
+                                        @selected((string) old('reservation_section') === (string) $section->id)>
+                                        {{ $section->name }}
+                                    </option>
+                                @endforeach
+                            @endforeach
+                        </x-atom.select>
+                        <x-atom.invalid-feedback data-reservation-error="reservation_section"></x-atom.invalid-feedback>
                     </div>
                 </x-molecule.field>
         </x-molecule.card-body>

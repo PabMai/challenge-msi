@@ -34,6 +34,46 @@ const clearFieldErrors = (form) => {
     });
 };
 
+const initSectionCascade = (form) => {
+    const locationSelect = form.querySelector('[data-reservation-location-select]');
+    const sectionSelect = form.querySelector('[data-reservation-section-select]');
+
+    if (!locationSelect || !sectionSelect) {
+        return;
+    }
+
+    const applyFilter = () => {
+        const locationId = locationSelect.value;
+        let selectedVisible = false;
+
+        Array.from(sectionSelect.options).forEach((option) => {
+            if (!option.value) {
+                return;
+            }
+
+            option.hidden = option.dataset.locationId !== locationId;
+            if (!option.hidden && option.selected) {
+                selectedVisible = true;
+            }
+        });
+
+        sectionSelect.disabled = locationId === '';
+        if (!selectedVisible) {
+            sectionSelect.value = '';
+        }
+    };
+
+    locationSelect.addEventListener('change', () => {
+        sectionSelect.classList.remove('is-invalid');
+        const feedback = form.querySelector('[data-reservation-error="reservation_section"]');
+        if (feedback) feedback.textContent = '';
+
+        applyFilter();
+    });
+
+    applyFilter();
+};
+
 const renderFieldErrors = (form, errors) => {
     Object.entries(errors).forEach(([field, messages]) => {
         const input = form.querySelector(`[name="${field}"]`);
@@ -227,7 +267,10 @@ class ReservationFormController {
 const initReservationForms = () => {
     document
         .querySelectorAll('[data-reservation-form]')
-        .forEach((form) => new ReservationFormController(form));
+        .forEach((form) => {
+            new ReservationFormController(form);
+            initSectionCascade(form);
+        });
 };
 
 if (document.readyState === 'loading') {

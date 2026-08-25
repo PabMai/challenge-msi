@@ -3,3 +3,10 @@
 :root {
     --bs-body-font-family: 'Instrument Sans', system-ui, sans-serif;
 }
+
+/* Sección dependiente: se ve claramente deshabilitada hasta elegir ubicación */
+[data-reservation-section-select]:disabled {
+    background-color: var(--bs-secondary-bg);
+    opacity: 0.65;
+    cursor: not-allowed;
+}
