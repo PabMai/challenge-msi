@@ -5,17 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Table extends Model
+class Section extends Model
 {
-    /** @use HasFactory<\Database\Factories\TableFactory> */
+    /** @use HasFactory<\Database\Factories\SectionFactory> */
     use HasFactory;
 
     protected $fillable = [
         'location_id',
-        'section_id',
-        'code',
-        'capacity',
+        'name',
     ];
 
     public function location(): BelongsTo
@@ -23,8 +22,11 @@ class Table extends Model
         return $this->belongsTo(Location::class);
     }
 
-    public function section(): BelongsTo
+    /**
+     * @return HasMany<Table, $this>
+     */
+    public function tables(): HasMany
     {
-        return $this->belongsTo(Section::class);
+        return $this->hasMany(Table::class);
     }
 }

@@ -14,6 +14,7 @@ class Reservation extends Model
         'ends_at',
         'people_count',
         'location_id',
+        'section_id',
     ];
 
     protected $casts = [
@@ -25,6 +26,11 @@ class Reservation extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class);
+    }
+
+    public function section(): BelongsTo
+    {
+        return $this->belongsTo(Section::class);
     }
 
     /**
