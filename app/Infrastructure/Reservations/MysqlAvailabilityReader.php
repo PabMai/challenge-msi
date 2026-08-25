@@ -27,7 +27,7 @@ final class MysqlAvailabilityReader implements AvailabilityReaderInterface
             ->all();
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
+    public function availableTables(int $locationId, ServiceSlot $slot, int $sectionId): array
     {
         $busyTableIds = DB::table('reservation_table')
             ->join('reservations', 'reservations.id', '=', 'reservation_table.reservation_id')
@@ -38,10 +38,7 @@ final class MysqlAvailabilityReader implements AvailabilityReaderInterface
 
         return Table::query()
             ->where('location_id', $locationId)
-            ->when(
-                $sectionId !== null,
-                fn ($query) => $query->where('section_id', $sectionId),
-            )
+            ->where('section_id', $sectionId)
             ->whereNotIn('id', $busyTableIds)
             ->orderBy('code')
             ->get()

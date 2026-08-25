@@ -15,8 +15,8 @@ use Throwable;
  * Decorador Redis del puerto de disponibilidad.
  *
  * - TTL de 120 s por clave (ubicación + turno + sección).
- * - Solo cachea lecturas con sección concreta: cada clave corresponde a
- *   un contenido real; sin sección se lee directo de MySQL.
+ * - Toda lectura lleva sección concreta: cada clave corresponde a un
+ *   contenido real.
  * - Si Redis falla (caída, timeout), degrada a MySQL sin romper la petición
  *   y lo registra en el log.
  */
@@ -37,14 +37,8 @@ final class CacheAvailabilityReader implements AvailabilityReaderInterface
         );
     }
 
-    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array
+    public function availableTables(int $locationId, ServiceSlot $slot, int $sectionId): array
     {
-        // Sin sección concreta no se carga disponibilidad: la lectura exige
-        // una sección real, que es además lo único que se cachea.
-        if ($sectionId === null) {
-            return [];
-        }
-
         $key = sprintf(
             'reservations:availability:%d:%s:%s-%s:%d',
             $locationId,

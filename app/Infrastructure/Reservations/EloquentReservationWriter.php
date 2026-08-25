@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class EloquentReservationWriter implements ReservationWriterInterface
 {
-    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, ?int $sectionId = null): int
+    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, int $sectionId): int
     {
         return DB::transaction(function () use ($slot, $peopleCount, $locationId, $tableIds, $sectionId): int {
             $reservation = Reservation::query()->create([
