@@ -20,12 +20,10 @@ interface AvailabilityReaderInterface
     public function orderedLocations(): array;
 
     /**
-     * Mesas de la ubicación libres para el turno completo.
-     *
-     * Cuando se indica una sección, solo devuelve mesas de esa sección
-     * (sin caer a otras secciones de la misma ubicación).
+     * Mesas de la ubicación y sección indicadas, libres para el turno
+     * completo. La sección es obligatoria: sin ella no hay lectura.
      *
      * @return list<AvailableTable>
      */
-    public function availableTables(int $locationId, ServiceSlot $slot, ?int $sectionId = null): array;
+    public function availableTables(int $locationId, ServiceSlot $slot, int $sectionId): array;
 }

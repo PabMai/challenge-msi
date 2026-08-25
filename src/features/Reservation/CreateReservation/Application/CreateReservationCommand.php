@@ -13,8 +13,8 @@ final readonly class CreateReservationCommand
         public string $date,   // Y-m-d tal como la pide el cliente
         public string $time,   // H:i solicitado (puede ser madrugada)
         public int $peopleCount,
+        public int $sectionId, // sección elegida: obligatoria, sin fallback
         public \DateTimeImmutable $now,
         public ?int $locationId = null,  // null = recorrer todas por prioridad
-        public ?int $sectionId = null,   // null = todas las secciones de la ubicación
     ) {}
 }

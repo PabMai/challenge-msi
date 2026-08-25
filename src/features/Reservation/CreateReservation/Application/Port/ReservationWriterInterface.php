@@ -15,7 +15,7 @@ interface ReservationWriterInterface
      * Persiste la reserva junto a sus mesas asignadas.
      *
      * @param list<int> $tableIds
-     * @param int|null  $sectionId Sección elegida (null = sin pin de sección).
+     * @param int       $sectionId Sección elegida (obligatoria).
      *
      * @return int Id de la reserva creada.
      */
@@ -24,6 +24,6 @@ interface ReservationWriterInterface
         int $peopleCount,
         int $locationId,
         array $tableIds,
-        ?int $sectionId = null,
+        int $sectionId,
     ): int;
 }

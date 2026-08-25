@@ -21,7 +21,7 @@ final readonly class CreateReservationResult
         public int $peopleCount,
         public ServiceSlot $slot,
         public array $tableCodes,
-        public ?int $sectionId = null,
+        public int $sectionId,
     ) {
     }
 }
