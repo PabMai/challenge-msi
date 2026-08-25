@@ -205,6 +205,7 @@ test('GET /reservations lista las reservas de una fecha con ubicacion y mesas', 
         ->assertJsonPath('reservations.0.people_count', 6)
         ->assertJsonPath('reservations.0.starts_at', '20:00')
         ->assertJsonPath('reservations.0.location.name', 'Salón')
+        ->assertJsonPath('reservations.0.section.name', 'Salón Principal')
         ->assertJsonCount(2, 'reservations.0.tables')
         ->assertJsonPath('reservations.0.tables.0.code', 'S01');
 });
