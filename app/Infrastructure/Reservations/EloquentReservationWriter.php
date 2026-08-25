@@ -17,15 +17,16 @@ use Illuminate\Support\Facades\DB;
  */
 final class EloquentReservationWriter implements ReservationWriterInterface
 {
-    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds): int
+    public function persist(ServiceSlot $slot, int $peopleCount, int $locationId, array $tableIds, ?int $sectionId = null): int
     {
-        return DB::transaction(function () use ($slot, $peopleCount, $locationId, $tableIds): int {
+        return DB::transaction(function () use ($slot, $peopleCount, $locationId, $tableIds, $sectionId): int {
             $reservation = Reservation::query()->create([
                 'business_date' => $slot->businessDateString(),
                 'starts_at' => $slot->startsAt,
                 'ends_at' => $slot->endsAt,
                 'people_count' => $peopleCount,
                 'location_id' => $locationId,
+                'section_id' => $sectionId,
             ]);
 
             $reservation->tables()->sync($tableIds);
